@@ -22,6 +22,29 @@ def analyze_environmental_data(records: List[dict]) -> SecrSchema:
             "column_names": df.columns.tolist(),
         }
 
+    # Compute numeric summaries for each column
+    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+
+    column_stats = {}
+    for col in numeric_cols:
+        series = df[col].dropna()  # ignore NaN values
+        if len(series) > 0:
+            column_stats[col] = {
+                "sum": series.sum(),
+                "mean": series.mean(),
+                "min": series.min(),
+                "max": series.max(),
+                "count": series.count(),
+            }
+        else:
+            column_stats[col] = {
+                "sum": None,
+                "mean": None,
+                "min": None,
+                "max": None,
+                "count": 0,
+            }
+
     # Instantiate empty insights schema
     insights = SecrSchema()
 
@@ -34,7 +57,11 @@ Your task: parse raw company reports, spreadsheets, or tables and populate a str
 Your output MUST strictly conform to this JSON schema:
 {SecrSchema.model_json_schema()}
 
+Precomputed numeric stats per column:
+{column_stats}
+
 Rules for extraction:
+- Use {column_stats} to help you these are already computed values to help you not allucinate random values.
 - Extract values from the provided raw text/tables and map them to the correct fields in the schema.
 - Perform safe numeric operations only when explicitly supported:
   • Use sums for flow metrics (energy_kwh, fuel_litres, emissions, waste_tonnes, water_m3).
