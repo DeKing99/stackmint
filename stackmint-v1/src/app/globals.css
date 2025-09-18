@@ -1,6 +1,16 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+.tiptap-editor {
+  /* Paste imports here inside the wrapper */
+  @import '../styles/_variables.scss';
+  @import '../styles/_keyframe-animations.scss';
+  
+  /* If those SCSS files have global selectors like :root, 
+     change them to :host or just redefine them locally */
+}
+
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -188,3 +198,4 @@
     letter-spacing: var(--tracking-normal);
   }
 }
+

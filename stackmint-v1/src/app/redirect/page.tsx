@@ -12,8 +12,8 @@ export default async function RedirectPage() {
       <OrganizationList
         hideSlug={false}
         hidePersonal
-        afterSelectOrganizationUrl="/orgs/:slug/dashboard"
-        afterCreateOrganizationUrl="/orgs/:slug/dashboard"
+        afterSelectOrganizationUrl="/orgs/:slug/headquarters/dashboard"
+        afterCreateOrganizationUrl="/orgs/:slug/headquarters/dashboard"
       />
     );
   }

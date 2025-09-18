@@ -21,9 +21,6 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  //DropdownMenuItem,
-  //DropdownMenuLabel,
-  //DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -35,8 +32,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { createClient} from "@supabase/supabase-js"
-import { useSession, useOrganization } from "@clerk/nextjs";
+import { createClient } from "@supabase/supabase-js";
+import { useSession } from "@clerk/nextjs";
 
 // Define the shape of your Supabase table
 export type UploadedFile = {
@@ -98,7 +95,13 @@ export const columns: ColumnDef<UploadedFile>[] = [
   },
 ];
 
-export function DataTableDemo() {
+// ✅ New props interface
+interface DataTableDemoProps {
+  organizationId: string;
+  siteSlug: string;
+}
+
+export function DataTableDemo({ organizationId, siteSlug }: DataTableDemoProps) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
     []
@@ -109,33 +112,33 @@ export function DataTableDemo() {
   const [data, setData] = React.useState<UploadedFile[]>([]);
   const [loading, setLoading] = React.useState(true);
 
-  const { organization } = useOrganization();
-
-  const orgId = organization?.id;
-
   const { session } = useSession();
+
   function createClerkSupabaseClient() {
-      return createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        {
-          async accessToken() {
-            return session?.getToken() ?? null;
+    return createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        global: {
+          headers: {
+            Authorization: `Bearer ${session?.getToken() ?? ""}`,
           },
-        }
-      );
+        },
+      }
+    );
   }
-  
+
   const supabase = createClerkSupabaseClient();
 
   React.useEffect(() => {
     const fetchData = async () => {
-      if (!orgId) return;
+      if (!organizationId || !siteSlug) return;
 
       const { data: files, error } = await supabase
         .from("uploaded_esg_files_construction")
         .select("*")
-        .eq("organization_id", orgId)
+        .eq("organization_id", organizationId)
+        .eq("file_site_id", siteSlug) // 🔑 filter by site slug
         .order("created_at", { ascending: false });
 
       if (error) {
@@ -148,7 +151,7 @@ export function DataTableDemo() {
     };
 
     fetchData();
-  }, [supabase, orgId]);
+  }, [supabase, organizationId, siteSlug]);
 
   const table = useReactTable({
     data,

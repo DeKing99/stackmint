@@ -1,4 +1,6 @@
+
 import { AppSidebar } from "@/components/app-sidebar";
+import { TopBar } from "@/components/top-bar";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -31,8 +33,9 @@ export default function DashboardLayout({
                 orientation="vertical"
                 className="mr-2 data-[orientation=vertical]:h-4"
               />
-              <Breadcrumb>
-                <BreadcrumbList>
+              
+              <TopBar />
+                {/* <BreadcrumbList>
                   <BreadcrumbItem className="hidden md:block">
                     <BreadcrumbLink href="#">Dashboard</BreadcrumbLink>
                   </BreadcrumbItem>
@@ -40,8 +43,8 @@ export default function DashboardLayout({
                   <BreadcrumbItem>
                     <BreadcrumbPage>Summary</BreadcrumbPage>
                   </BreadcrumbItem>
-                </BreadcrumbList>
-              </Breadcrumb>
+                </BreadcrumbList> */}
+              
             </div>
           </header>
           {/* <div className="flex flex-1 flex-col gap-4 p-4 pt-0">

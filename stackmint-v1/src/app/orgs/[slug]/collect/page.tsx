@@ -149,7 +149,7 @@ export default function FileUploader() {
     }
 
     try {
-      const res = await fetch(" http://localhost:8001/analyze", {
+      const res = await fetch("http://localhost:8001/analyze", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

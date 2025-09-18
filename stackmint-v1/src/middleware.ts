@@ -14,7 +14,7 @@ export default clerkMiddleware(async (auth, req) => {
       return NextResponse.next(); // Let redirect page render
     }
 
-    return NextResponse.redirect(new URL(`/orgs/${orgSlug}/dashboard`, req.url));
+    return NextResponse.redirect(new URL(`/orgs/${orgSlug}/headquarters/dashboard`, req.url));
   }
 
   // ✅ Don't redirect elsewhere unless required
