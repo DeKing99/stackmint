@@ -1,3 +1,4 @@
+// components/file-table.tsx
 "use client";
 
 import * as React from "react";
@@ -9,6 +10,7 @@ import {
   getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
+  //getFilteredSelectedRowModel,
   SortingState,
   useReactTable,
   VisibilityState,
@@ -32,22 +34,20 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { createClient } from "@supabase/supabase-js";
 import { useSession } from "@clerk/nextjs";
+import { createClerkSupabaseClient } from "@/lib/supabase-client";
 
-// Define the shape of your Supabase table
 export type UploadedFile = {
   id: string;
   file_name: string;
   file_site_id: string;
   file_url: string;
-  user_id: string;
-  user_name: string;
-  organization_id: string;
-  created_at: string;
+  user_id?: string;
+  user_name?: string;
+  organization_id?: string;
+  created_at?: string;
 };
 
-// Define table columns based on Supabase schema
 export const columns: ColumnDef<UploadedFile>[] = [
   {
     id: "select",
@@ -78,7 +78,7 @@ export const columns: ColumnDef<UploadedFile>[] = [
   },
   {
     accessorKey: "file_site_id",
-    header: "File Site ID",
+    header: "Site ID",
     cell: ({ row }) => <div>{row.getValue("file_site_id")}</div>,
   },
   {
@@ -89,19 +89,26 @@ export const columns: ColumnDef<UploadedFile>[] = [
   {
     accessorKey: "created_at",
     header: "Uploaded At",
-    cell: ({ row }) => (
-      <div>{new Date(row.getValue("created_at")).toLocaleString()}</div>
-    ),
+    cell: ({ row }) =>
+      row.getValue("created_at")
+        ? new Date(row.getValue("created_at")).toLocaleString()
+        : "-",
   },
 ];
 
-// ✅ New props interface
 interface DataTableDemoProps {
   organizationId: string;
-  siteSlug: string;
+  siteId?: string | null; // expects file_site_id (not slug)
+  onSelectionChange?: (rows: UploadedFile[]) => void;
+  pageSize?: number;
 }
 
-export function DataTableDemo({ organizationId, siteSlug }: DataTableDemoProps) {
+export function DataTableDemo({
+  organizationId,
+  siteId,
+  onSelectionChange,
+  pageSize = 25,
+}: DataTableDemoProps) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
     []
@@ -111,47 +118,50 @@ export function DataTableDemo({ organizationId, siteSlug }: DataTableDemoProps) 
   const [rowSelection, setRowSelection] = React.useState({});
   const [data, setData] = React.useState<UploadedFile[]>([]);
   const [loading, setLoading] = React.useState(true);
-
   const { session } = useSession();
 
-  function createClerkSupabaseClient() {
-    return createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        global: {
-          headers: {
-            Authorization: `Bearer ${session?.getToken() ?? ""}`,
-          },
-        },
-      }
-    );
-  }
-
-  const supabase = createClerkSupabaseClient();
+  const supabase = React.useMemo(
+    () =>
+      createClerkSupabaseClient(
+        () => session?.getToken?.() ?? Promise.resolve(null)
+      ),
+    [session]
+  );
 
   React.useEffect(() => {
-    const fetchData = async () => {
-      if (!organizationId || !siteSlug) return;
+    let mounted = true;
+    if (!organizationId || !siteId) {
+      setData([]);
+      setLoading(false);
+      return;
+    }
 
+    setLoading(true);
+    const fetchData = async () => {
       const { data: files, error } = await supabase
         .from("uploaded_esg_files_construction")
         .select("*")
         .eq("organization_id", organizationId)
-        .eq("file_site_id", siteSlug) // 🔑 filter by site slug
-        .order("created_at", { ascending: false });
+        .eq("file_site_id", siteId)
+        .order("created_at", { ascending: false })
+        .limit(pageSize);
 
+      if (!mounted) return;
       if (error) {
         console.error("Error fetching Supabase data:", error);
-        return;
+        setData([]);
+      } else {
+        setData(files || []);
       }
-
-      setData(files || []);
       setLoading(false);
     };
 
     fetchData();
-  }, [supabase, organizationId, siteSlug]);
+
+    return () => {
+      mounted = false;
+    };
+  }, [supabase, organizationId, siteId, pageSize]);
 
   const table = useReactTable({
     data,
@@ -171,6 +181,14 @@ export function DataTableDemo({ organizationId, siteSlug }: DataTableDemoProps) 
       rowSelection,
     },
   });
+
+  // call the parent callback whenever selection changes
+  React.useEffect(() => {
+    const selected = table
+      .getFilteredSelectedRowModel()
+      .rows.map((r) => r.original);
+    onSelectionChange?.(selected);
+  }, [rowSelection, table, onSelectionChange]);
 
   return (
     <div className="w-full">
@@ -195,23 +213,20 @@ export function DataTableDemo({ organizationId, siteSlug }: DataTableDemoProps) 
             {table
               .getAllColumns()
               .filter((column) => column.getCanHide())
-              .map((column) => {
-                return (
-                  <DropdownMenuCheckboxItem
-                    key={column.id}
-                    className="capitalize"
-                    checked={column.getIsVisible()}
-                    onCheckedChange={(value) =>
-                      column.toggleVisibility(!!value)
-                    }
-                  >
-                    {column.id}
-                  </DropdownMenuCheckboxItem>
-                );
-              })}
+              .map((column) => (
+                <DropdownMenuCheckboxItem
+                  key={column.id}
+                  className="capitalize"
+                  checked={column.getIsVisible()}
+                  onCheckedChange={(value) => column.toggleVisibility(!!value)}
+                >
+                  {column.id}
+                </DropdownMenuCheckboxItem>
+              ))}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
       <div className="rounded-md border">
         <Table>
           <TableHeader>
@@ -244,7 +259,7 @@ export function DataTableDemo({ organizationId, siteSlug }: DataTableDemoProps) 
               table.getRowModel().rows.map((row) => (
                 <TableRow
                   key={row.id}
-                  data-state={row.getIsSelected() && "selected"}
+                  data-state={row.getIsSelected() ? "selected" : undefined}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
@@ -269,6 +284,7 @@ export function DataTableDemo({ organizationId, siteSlug }: DataTableDemoProps) 
           </TableBody>
         </Table>
       </div>
+
       <div className="flex items-center justify-end space-x-2 py-4">
         <div className="text-muted-foreground flex-1 text-sm">
           {table.getFilteredSelectedRowModel().rows.length} of{" "}

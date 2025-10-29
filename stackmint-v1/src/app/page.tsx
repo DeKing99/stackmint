@@ -17,14 +17,14 @@ export default function StackmintLanding() {
             <div className="flex items-center">
               <div className="flex items-center space-x-2">
                 <Image
-                  src="/stackmint logo blue white bg.png"
+                  src="/stackmint-v2-logo-purple-high-quality-v1.png"
                   alt="Stackmint Logo"
-                  width={64}
-                  height={64}
+                  width={32}
+                  height={32}
                 />
-                <span className="text-xl font-bold text-[#0057FF]">
+                {/* <span className="text-xl font-bold text-[#0057FF]">
                   stackmint
-                </span>
+                </span> */}
               </div>
             </div>
 

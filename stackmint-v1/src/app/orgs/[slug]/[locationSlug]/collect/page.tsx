@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useDropzone } from "react-dropzone";
 import { useUser, useSession, useOrganization } from "@clerk/nextjs";
-import { createClient } from "@supabase/supabase-js";
 import {
   Dialog,
   DialogContent,
@@ -18,6 +17,7 @@ import { Calendar23 } from "@/components/calendar-23";
 import { type DateRange } from "react-day-picker";
 import { v4 as uuidv4 } from "uuid";
 import { useParams } from "next/navigation";
+import { createClerkSupabaseClient } from "@/lib/supabase-client";
 
 type Site = {
   id: string; // Assuming you have an ID field
@@ -28,15 +28,15 @@ type Site = {
 
 export default function FileUploader() {
   const { locationSlug } = useParams<{ locationSlug: string }>();
+  const { user } = useUser();
+  const { session } = useSession();
+  const { organization } = useOrganization();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [site, setSite] = useState<Site>();  // i removed the array thing becuase we alre no longer importing multiple site just one
   const [selectedSite, setSelectedSite] = useState<Site>();
   const [isUploading, setIsUploading] = useState(false);
   const [range, setRange] = useState<DateRange | undefined>();
-
-  const { user } = useUser();
-  const { session } = useSession();
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: (acceptedFiles) => {
@@ -47,25 +47,18 @@ export default function FileUploader() {
     },
   });
 
-  function createClerkSupabaseClient() {
-    return createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        async accessToken() {
-          return session?.getToken() ?? null;
-        },
-      }
-    );
-  }
-
-  const client = createClerkSupabaseClient();
-  const { organization } = useOrganization();
+  const supabase = useMemo(
+      () =>
+        createClerkSupabaseClient(
+          () => session?.getToken?.() ?? Promise.resolve(null)
+        ),
+      [session]
+  );
 
   useEffect(() => {
     if (!organization) return;
     const fetchSites = async () => {
-      const { data: siteData, error: siteError } = await client
+      const { data: siteData, error: siteError } = await supabase
         .from("construction_sites")
         .select("*")
         .eq("organization_id", organization.id)
@@ -85,7 +78,7 @@ export default function FileUploader() {
       }
     };
     fetchSites();
-  }, [organization, client]);
+  }, [organization, supabase]);
 
   const handleUpload = async () => {
     if (!selectedFile || !user || !session || !organization) return;
@@ -95,9 +88,6 @@ export default function FileUploader() {
     );
 
     setIsUploading(true);
-
-    //const client = createClerkSupabaseClient();
-
     //const path = `public/${type}/${user.id}_${selectedFile.name}`;
     const safeName = selectedFile.name.replace(/\s+/g, "_");
     const uniqueSuffix = uuidv4()
@@ -111,33 +101,35 @@ export default function FileUploader() {
       file_name: safeName,
       // I need to change this in the future so that it actually goes to the correct path link
       file_url: filePath,
+      //public_file_url: publicUrlData?.publicUrl ?? null,
       user_id: user.id,
+      mime_type: selectedFile.type,
       user_name: user.fullName,
       organization_id: organization.id,
-      file_site_id: site?.id,   // this was originally selectedSite?.id ive changed to just Site
+      file_site_id: site?.id, // this was originally selectedSite?.id ive changed to just Site
       start_date: range?.from?.toISOString().slice(0, 10),
-      end_date: range?.to?.toISOString().slice(0, 10),     
-     };
+      end_date: range?.to?.toISOString().slice(0, 10),
+    };
 
-    const { data, error } = await client.storage
+    const { data, error } = await supabase.storage
       .from("esg-data-2")
       .upload(filePath, selectedFile, {  // upsert = false if it doesnt work
         contentType: selectedFile.type || "application/octet-stream",
       });
-
+    console.log("MIME TYPE:", selectedFile.type);
+    
     if (error) {
       console.error("Upload error:", error);
       toast.error(`Upload failed: ${error.message}`);
       setIsUploading(false);
     } else {
-      console.log("Upload successful:", data);
       setModalOpen(false);
       setSelectedFile(null);
       toast.success("Succesfully uploaded to database");
       setIsUploading(false);
 
       console.log("Trying to insert metadata:", metadata);
-      const { data: tableData, error: tableError } = await client
+      const { data: tableData, error: tableError } = await supabase
         .from("uploaded_esg_files_construction")
         .insert([metadata])
         .select();
@@ -257,7 +249,7 @@ export default function FileUploader() {
             </p>
           </div>
           {/* Replace "your_table_name" with your actual Supabase table name */}
-          <DataTableDemo organizationId={organization?.id!} siteSlug={locationSlug} />
+          <DataTableDemo organizationId={organization?.id!} siteId={site?.id} />
         </div>
       </section>
     </>

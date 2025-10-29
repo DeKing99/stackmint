@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   if (!apiKey) {
     return NextResponse.json(
       { error: 'Missing OpenAI API key.' },
-      { status: 40111 }
+      { status: 401 }
     );
   }
 

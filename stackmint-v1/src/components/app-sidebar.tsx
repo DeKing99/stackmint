@@ -139,3 +139,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     </Sidebar>
   );
 }
+
+
+// little note to myself that i should probably turn this compoent into a server component use auth() instead

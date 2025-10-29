@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
+//import { FilePreviewer } from "@/components/file-previewer";
 //import { SupabaseProvider } from "./providers/supabase-provider";
 
 export const metadata: Metadata = {
