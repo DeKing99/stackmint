@@ -14,9 +14,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { DataTableDemo } from "@/components/file-table";
-import { Calendar23 } from "@/components/calendar-23";
-import { type DateRange } from "react-day-picker";
+// import calendar component replaced by simple date input
+// import { Calendar23 } from "@/components/calendar-23";
+// import { type DateRange } from "react-day-picker";
 import { v4 as uuidv4 } from "uuid";
+import { activityTypes } from "@/lib/activity_types_schema";
 
 type Site = {
   id: string; // Assuming you have an ID field
@@ -28,10 +30,8 @@ type Site = {
 export default function FileUploader() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const [site, setSite] = useState<Site[]>([]);
-  const [selectedSite, setSelectedSite] = useState<Site>();
+  const [activityType, setActivityType] = useState<string>("");
   const [isUploading, setIsUploading] = useState(false);
-  const [range, setRange] = useState<DateRange | undefined>();
 
   const { user } = useUser();
   const { session } = useSession();
@@ -53,7 +53,7 @@ export default function FileUploader() {
         async accessToken() {
           return session?.getToken() ?? null;
         },
-      }
+      },
     );
   }
 
@@ -61,34 +61,12 @@ export default function FileUploader() {
   const { organization } = useOrganization();
 
   useEffect(() => {
-    if (!organization) return;
-    const fetchSites = async () => {
-      const { data: siteData, error: siteError } = await client
-        .from("construction_sites")
-        .select("*")
-        .eq("organization_id", organization.id);
-      if (siteError) {
-        console.error(
-          "Error fetching sites something wrong with use Effect:",
-          siteError
-        );
-      } else {
-        setSite(siteData || []);
-        // Set default selected site to the first one
-        if (siteData && siteData.length > 0) {
-          setSelectedSite(siteData[0]);
-        }
-      }
-    };
-    fetchSites();
-  }, [organization, client]);
+    // site fetching removed - not needed for now
+  }, []);
 
   const handleUpload = async () => {
     if (!selectedFile || !user || !session || !organization) return;
-    console.log(
-      "there either user file or session sint present from marvis",
-      selectedSite
-    );
+    console.log("Uploading file with activity type:", activityType);
 
     setIsUploading(true);
 
@@ -96,28 +74,27 @@ export default function FileUploader() {
 
     //const path = `public/${type}/${user.id}_${selectedFile.name}`;
     const safeName = selectedFile.name.replace(/\s+/g, "_");
-    const uniqueSuffix = uuidv4()
+    const uniqueSuffix = uuidv4();
     const uniqueFileName = `${user.id}_${uniqueSuffix}_${safeName}`;
-    const filePath = `${organization.id}/${
-      selectedSite?.site_name || "unknown"
-    }/${uniqueFileName}`;
+    const filePath = `${organization.id}/${uniqueFileName}`;
     let row_id;
 
     const metadata = {
       file_name: safeName,
-      // I need to change this in the future so that it actually goes to the correct path link
-      file_url: filePath,
-      user_id: user.id,
-      user_name: user.fullName,
       organization_id: organization.id,
-      file_site_id: selectedSite?.id,
-      start_date: range?.from?.toISOString().slice(0, 10),
-      end_date: range?.to?.toISOString().slice(0, 10),     
-     };
+      file_type: selectedFile.type,
+      storage_path: filePath,
+      upload_method: "manual",
+      uploaded_by: user.id,
+      uploaded_at: new Date().toISOString(),
+      parsing_status: "pending",
+      activity_type: activityType,
+    };
 
     const { data, error } = await client.storage
       .from("esg-data-2")
-      .upload(filePath, selectedFile, {  // upsert = false if it doesnt work
+      .upload(filePath, selectedFile, {
+        // upsert = false if it doesnt work
         contentType: selectedFile.type || "application/octet-stream",
       });
 
@@ -134,7 +111,7 @@ export default function FileUploader() {
 
       console.log("Trying to insert metadata:", metadata);
       const { data: tableData, error: tableError } = await client
-        .from("uploaded_esg_files_construction")
+        .from("company_raw_uploads")
         .insert([metadata])
         .select();
 
@@ -157,7 +134,7 @@ export default function FileUploader() {
         body: JSON.stringify({
           file_url: filePath,
           row_id: row_id,
-          category: selectedSite,
+          activity_type: activityType,
         }),
       });
 
@@ -180,33 +157,36 @@ export default function FileUploader() {
         <Dialog open={modalOpen} onOpenChange={setModalOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Select data type</DialogTitle>
+              <DialogTitle>Select activity type</DialogTitle>
               <DialogDescription>
                 Current file: <strong>{selectedFile.name}</strong>
               </DialogDescription>
             </DialogHeader>
 
-            <select
-              value={selectedSite?.id || ""}
-              onChange={(e) => {
-                const selectedId = e.target.value;
-                const foundSite = site.find((s) => s.id === selectedId);
-                setSelectedSite(foundSite);
-                console.log(
-                  "this is to see if it actyally finds the iste",
-                  foundSite
-                );
-              }}
-              className="w-full border rounded p-2 mt-2"
-            >
-              {site.map((sites) => (
-                <option key={sites.id} value={sites.id}>
-                  {sites.site_name}
+            {/* select activity type */}
+            <label className="block mt-4">
+              <span className="text-gray-700">Activity type</span>
+              <select
+                value={activityType}
+                onChange={(e) => setActivityType(e.target.value)}
+                className="w-full border rounded p-2 mt-1"
+              >
+                <option value="" disabled>
+                  -- choose an activity --
                 </option>
-              ))}
-            </select>
-
-            <Calendar23 range={range} setRange={setRange} />
+                {activityTypes.map((a) => (
+                  <option key={a.value} value={a.value}>
+                    {a.label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-sm text-gray-500 mt-1">
+                {
+                  activityTypes.find((a) => a.value === activityType)
+                    ?.description
+                }
+              </p>
+            </label>
 
             <Button
               className="mt-4 w-full"
@@ -253,7 +233,7 @@ export default function FileUploader() {
             </p>
           </div>
           {/* Replace "your_table_name" with your actual Supabase table name */}
-          <DataTableDemo />
+          <DataTableDemo organizationId={organization?.id || ""} />
         </div>
       </section>
     </>

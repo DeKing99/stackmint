@@ -107,9 +107,15 @@ class PostgresChangesPayload(TypedDict):
     ids: List[int]
 
 
+class BroadcastMeta(TypedDict, total=False):
+    replayed: bool
+    id: str
+
+
 class BroadcastPayload(TypedDict):
     event: str
     payload: dict[str, Any]
+    meta: NotRequired[BroadcastMeta]
 
 
 @dataclass(frozen=True)
@@ -141,9 +147,11 @@ class PostgresChangesCallback:
 
     @property
     def binding_filter(self) -> dict[str, Optional[str]]:
-        binding = {"events": self.event, "table": self.table}
+        binding: dict[str, Optional[str]] = {"event": self.event}
         if self.schema:
             binding["schema"] = self.schema
+        if self.table:
+            binding["table"] = self.table
         if self.filter:
             binding["filter"] = self.filter
         return binding
@@ -172,13 +180,20 @@ class PresenceOpts:
 
 
 # TypedDicts
-class RealtimeChannelBroadcastConfig(TypedDict):
+class ReplayOption(TypedDict, total=False):
+    since: int
+    limit: int
+
+
+class RealtimeChannelBroadcastConfig(TypedDict, total=False):
     ack: bool
     self: bool
+    replay: ReplayOption
 
 
 class RealtimeChannelPresenceConfig(TypedDict):
     key: str
+    enabled: bool
 
 
 class RealtimeChannelConfig(TypedDict):
@@ -188,7 +203,7 @@ class RealtimeChannelConfig(TypedDict):
 
 
 class RealtimeChannelOptions(TypedDict):
-    config: RealtimeChannelConfig
+    config: NotRequired[RealtimeChannelConfig]
 
 
 @with_config(ConfigDict(extra="allow"))

@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pytz import UTC
 from app.api.routes import router
 from app.api.metrics import router as metrics_router  # adjust path if needed
+import asyncio
+from workers.polling import polling_worker
 
 from fastapi import FastAPI, Request, HTTPException, Body
 from pydantic import BaseModel, EmailStr
@@ -24,6 +26,11 @@ app.add_middleware(
 )
 # main.py 
 
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(polling_worker())
+
+
 @app.get("/")
 def read_root():
     return {"message": "Hello from Stackmint backend"}
@@ -31,3 +38,4 @@ def read_root():
 app.include_router(router)
 app.include_router(metrics_router)
 # ---------- endpoint: create a location (admin only) ----------
+
