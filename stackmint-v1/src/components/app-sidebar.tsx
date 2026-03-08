@@ -2,20 +2,26 @@
 
 import * as React from "react";
 import {
-  //AudioWaveform,
-  BookOpen,
-  Command,
-  //Command,
-  Frame,
-  Map,
-  PieChart,
-  Settings2,
+  // Building2,
+  // BookOpen,
+  FolderOpen,
+  // MapPin,
+  // PieChart,
+  // Users,
   SquareTerminal,
+  ReceiptText,
+  Library,
+  LayoutDashboard,
+  Blocks,
+  Map,
+  FileChartPie,
+  Settings,
+  Users2,
+  Building,
 } from "lucide-react";
 
 import { NavMain } from "@/components/nav-main";
-//import { NavProjects } from "@/components/nav-projects";
-import { UserButton, useOrganization } from "@clerk/nextjs";
+import { UserButton, useAuth, useOrganization } from "@clerk/nextjs";
 import {
   Sidebar,
   SidebarContent,
@@ -24,80 +30,125 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarRail,
 } from "@/components/ui/sidebar";
 import Image from "next/image";
-//import { IconCommandOff } from "@tabler/icons-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 
-// This is sample data.
-const data = {
-  navMain: [
-    {
-      title: "Dashboard",
-      url: "{organization ? `/orgs/${organization.slug}/dashboard` : '#''}",
-      icon: SquareTerminal,
-      isActive: true,
-      items: [],
-    },
-    {
-      title: "Reports",
-      url: "{organization ? `/orgs/${organization.slug}/reports` : '#''}",
-      icon: BookOpen,
-      items: [],
-    },
-    {
-      title: "Collect",
-      url: "{organization ? `/orgs/${organization.slug}/collect` : '#''}",
-      icon: PieChart,
-      items: [],
-    },
-    {
-      title: "Enviromental",
-      url: "#",
-      icon: Frame,
-      items: [],
-    },
-    {
-      title: "Social",
-      url: "#",
-      icon: Map,
-      items: [],
-    },
-    {
-      title: "Governance",
-      url: "#",
-      icon: Command,
-      items: [],
-    },
-    {
-      title: "Settings",
-      url: "#",
-      icon: Settings2,
-      items: [
-        {
-          title: "General",
-          url: "#",
-        },
-        {
-          title: "Team",
-          url: "#",
-        },
-        {
-          title: "Billing",
-          url: "#",
-        },
-        {
-          title: "Limits",
-          url: "#",
-        },
-      ],
-    },
-  ],
+type UserMetadata = {
+  role?: string;
+  org_slug?: string;
 };
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { organization } = useOrganization();
- //<NavProjects projects={data.team} />
+  const { orgId, orgRole, sessionClaims } = useAuth();
+  const pathname = usePathname();
+
+  const userMetadata =
+    (sessionClaims?.user_public_metadata as UserMetadata | undefined) || {};
+
+  const orgPathSegment =
+    organization?.slug || userMetadata.org_slug || orgId || "";
+  const isOrgAdmin = orgRole === "org:owner" || orgRole === "org:admin";
+  const isManager = userMetadata.role === "manager";
+  const canManageTeam = isOrgAdmin || isManager;
+
+  const currentLocationId = React.useMemo(() => {
+    const match = pathname.match(/\/orgs\/[^/]+\/locations\/([^/]+)/);
+    return match ? match[1] : null;
+  }, [pathname]);
+
+  const isLocationRoute = Boolean(currentLocationId);
+  const locationBase =
+    isLocationRoute && currentLocationId
+      ? `/orgs/${orgPathSegment}/locations/${currentLocationId}`
+      : null;
+
+  const navMain = React.useMemo(() => {
+    const items: { title: string; url: string; icon: typeof SquareTerminal }[] =
+      [
+        {
+          title: "Dashboard",
+          url: locationBase
+            ? `${locationBase}/dashboard`
+            : orgPathSegment
+              ? `/orgs/${orgPathSegment}/dashboard`
+              : "#",
+          icon: LayoutDashboard,
+        },
+        {
+          title: "Locations",
+          url: orgPathSegment ? `/orgs/${orgPathSegment}/locations` : "#",
+          icon: Map,
+        },
+        {
+          title: "Reports",
+          url: locationBase
+            ? `${locationBase}/reports`
+            : orgPathSegment
+              ? `/orgs/${orgPathSegment}/reports`
+              : "#",
+          icon: FileChartPie,
+        },
+        {
+          title: "Collect",
+          url: locationBase
+            ? `${locationBase}/collect`
+            : orgPathSegment
+              ? `/orgs/${orgPathSegment}/collect`
+              : "#",
+          icon: Library,
+        },
+      ];
+
+    if (locationBase) {
+      items.push({
+        title: "Overview",
+        url: `${locationBase}/overview`,
+        icon: Building,
+      });
+    } else {
+      items.push({
+        title: "Files",
+        url: orgPathSegment ? `/orgs/${orgPathSegment}/files` : "#",
+        icon: FolderOpen,
+      });
+    }
+
+    if (canManageTeam) {
+      items.push({
+        title: "Team",
+        url: locationBase
+          ? `${locationBase}/invite-members`
+          : orgPathSegment
+            ? `/orgs/${orgPathSegment}/team`
+            : "#",
+        icon: Users2,
+      });
+    }
+
+    if (isOrgAdmin && !locationBase) {
+      items.push(
+        {
+          title: "Billing",
+          url: orgPathSegment ? `/orgs/${orgPathSegment}/billing` : "#",
+          icon: ReceiptText,
+        },
+        {
+          title: "Integrations",
+          url: locationBase
+            ? `${locationBase}/instegrations`
+            : orgPathSegment
+              ? `/orgs/${orgPathSegment}/integrations`
+              : "#",
+          icon: Blocks,
+        },
+      );
+    }
+
+    return items;
+  }, [canManageTeam, isOrgAdmin, locationBase, orgPathSegment]);
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -105,7 +156,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <a href={organization ? `/orgs/${organization.slug}/dashboard` : "#"}>
+              <Link
+                href={
+                  organization ? `/orgs/${organization.slug}/dashboard` : "#"
+                }
+              >
                 <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
                   <Image
                     src={organization?.imageUrl || "/next.svg"}
@@ -121,24 +176,19 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   </span>
                   <span className="truncate text-xs">Enterprise</span>
                 </div>
-              </a>
+              </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={data.navMain} />
+        <NavMain items={navMain} />
       </SidebarContent>
       <SidebarFooter>
-        <div className="flex ">
-        {/*<SidebarMenuButton> <UserButton /> </SidebarMenuButton>*/}
+        <div className="flex justify-center">
           <UserButton />
         </div>
       </SidebarFooter>
-      <SidebarRail />
     </Sidebar>
   );
 }
-
-
-// little note to myself that i should probably turn this compoent into a server component use auth() instead

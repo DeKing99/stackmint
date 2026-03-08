@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useDropzone } from "react-dropzone";
 import { useUser, useSession, useOrganization } from "@clerk/nextjs";
 import {
@@ -20,22 +20,14 @@ import { useParams } from "next/navigation";
 import { createClerkSupabaseClient } from "@/lib/supabase-client";
 import { activityTypes } from "@/lib/activity_types_schema";
 
-type Site = {
-  id: string; // Assuming you have an ID field
-  site_name: string;
-  site_slug: string;
-  site_location: string;
-};
 
 export default function FileUploader() {
-  const { locationSlug } = useParams<{ locationSlug: string }>();
+  const { locationId } = useParams<{ locationId: string }>();
   const { user } = useUser();
   const { session } = useSession();
   const { organization } = useOrganization();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const [site, setSite] = useState<Site>(); // i removed the array thing becuase we alre no longer importing multiple site just one
-  const [selectedSite, setSelectedSite] = useState<Site>();
   const [activityType, setActivityType] = useState<string>("");
   const [isUploading, setIsUploading] = useState(false);
   const [range, setRange] = useState<DateRange | undefined>();
@@ -57,30 +49,30 @@ export default function FileUploader() {
     [session],
   );
 
-  useEffect(() => {
-    if (!organization) return;
-    const fetchSites = async () => {
-      const { data: siteData, error: siteError } = await supabase
-        .from("construction_sites")
-        .select("*")
-        .eq("organization_id", organization.id)
-        .eq("site_slug", locationSlug);
-      if (siteError) {
-        console.error(
-          "Error fetching sites something wrong with use Effect:",
-          siteError,
-        );
-      } else {
-        setSite(siteData ? siteData[0] : undefined); // since we are only fetching one site based on the slug
-        console.log("Fetched sites:", siteData);
-        // Set default selected site to the first one
-        if (siteData && siteData.length > 0) {
-          setSelectedSite(siteData[0]);
-        }
-      }
-    };
-    fetchSites();
-  }, [organization, supabase]);
+  // useEffect(() => {
+  //   if (!organization) return;
+  //   const fetchSites = async () => {
+  //     const { data: siteData, error: siteError } = await supabase
+  //       .from("construction_sites")
+  //       .select("*")
+  //       .eq("organization_id", organization.id)
+  //       .eq("site_slug", locationSlug);
+  //     if (siteError) {
+  //       console.error(
+  //         "Error fetching sites something wrong with use Effect:",
+  //         siteError,
+  //       );
+  //     } else {
+  //       setSite(siteData ? siteData[0] : undefined); // since we are only fetching one site based on the slug
+  //       console.log("Fetched sites:", siteData);
+  //       // Set default selected site to the first one
+  //       if (siteData && siteData.length > 0) {
+  //         setSelectedSite(siteData[0]);
+  //       }
+  //     }
+  //   };
+  //   fetchSites();
+  // }, [organization, supabase]);
 
   const handleUpload = async () => {
     if (!selectedFile || !user || !session || !organization) return;
@@ -95,8 +87,9 @@ export default function FileUploader() {
     const uniqueSuffix = uuidv4();
     const uniqueFileName = `${user.id}_${uniqueSuffix}_${safeName}`;
     const filePath = `${organization.id}/${
-      selectedSite?.site_name || "unknown"
-    }/${uniqueFileName}`;
+      locationId || "unknown"
+      }/${uniqueFileName}`;
+    
     let row_id;
 
     const metadata = {
@@ -116,10 +109,10 @@ export default function FileUploader() {
       uploaded_at: new Date().toISOString(),
       parsing_status: "pending",
       // i need this so i know where each file comes from etc.
-      company_location_id: session.lastActiveOrganizationId, // this very wrong i need to find a way to reference the comapnny location id.
+      company_location_id: locationId, // this very wrong i need to find a way to reference the comapnny location id.
     };
 
-    const { data, error } = await supabase.storage
+    const { error } = await supabase.storage
       .from("esg-data-2")
       .upload(filePath, selectedFile, {
         // upsert = false if it doesnt work
@@ -152,35 +145,36 @@ export default function FileUploader() {
         console.log("Insert successful, row ID:", row_id);
       }
     }
-
-    try {
-      const res = await fetch(
-        "https://glowing-parakeet-7jqvjqg9xvpcpg5-8001.app.github.dev/analyze",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            file_url: filePath,
-            row_id: row_id,
-            category: site,
-          }),
-        },
-      );
-
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error("Server error:", errorText);
-      } else {
-        const result = await res.json();
-        console.log("Server response (most likely successful):", result);
-      }
-      // https://ycyfqlehnoruigtrxixc.supabase.co/storage/v1/object/public/esg-data-2/
-    } catch (err) {
-      console.error("Failed to contact backend (fetch error):", err);
-    }
   };
+
+  //   try {
+  //     const res = await fetch(
+  //       "https://glowing-parakeet-7jqvjqg9xvpcpg5-8001.app.github.dev/analyze",
+  //       {
+  //         method: "POST",
+  //         headers: {
+  //           "Content-Type": "application/json",
+  //         },
+  //         body: JSON.stringify({
+  //           file_url: filePath,
+  //           row_id: row_id,
+  //           category: site,
+  //         }),
+  //       },
+  //     );
+
+  //     if (!res.ok) {
+  //       const errorText = await res.text();
+  //       console.error("Server error:", errorText);
+  //     } else {
+  //       const result = await res.json();
+  //       console.log("Server response (most likely successful):", result);
+  //     }
+  //     // https://ycyfqlehnoruigtrxixc.supabase.co/storage/v1/object/public/esg-data-2/
+  //   } catch (err) {
+  //     console.error("Failed to contact backend (fetch error):", err);
+  //   }
+  // };
 
   return (
     <>
@@ -188,7 +182,7 @@ export default function FileUploader() {
         <Dialog open={modalOpen} onOpenChange={setModalOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Select data type</DialogTitle>
+              <DialogTitle>Select Activity type</DialogTitle>
               <DialogDescription>
                 Current file: <strong>{selectedFile.name}</strong>
               </DialogDescription>
@@ -219,7 +213,7 @@ export default function FileUploader() {
               </p>
             </label>
 
-            <Calendar23 range={range} setRange={setRange} />
+            {/* <Calendar23 range={range} setRange={setRange} /> */}
 
             <Button
               className="mt-4 w-full"
@@ -266,7 +260,7 @@ export default function FileUploader() {
             </p>
           </div>
           {/* Replace "your_table_name" with your actual Supabase table name */}
-          <DataTableDemo organizationId={organization?.id!} siteId={site?.id} />
+          <DataTableDemo organizationId={organization?.id!}/>
         </div>
       </section>
     </>

@@ -90,22 +90,22 @@ export const columns: ColumnDef<UploadedFile>[] = [
     accessorKey: "created_at",
     header: "Uploaded At",
     cell: ({ row }) =>
-      row.getValue("created_at")
-        ? new Date(row.getValue("created_at")).toLocaleString()
+      row.getValue("uploaded_at")
+        ? new Date(row.getValue("uploaded_at")).toLocaleString()
         : "-",
   },
 ];
 
 interface DataTableDemoProps {
   organizationId: string;
-  siteId?: string | null; // expects file_site_id (not slug)
+  locationId?: string | null; // expects file_site_id (not slug)
   onSelectionChange?: (rows: UploadedFile[]) => void;
   pageSize?: number;
 }
 
 export function DataTableDemo({
   organizationId,
-  siteId,
+  locationId,
   onSelectionChange,
   pageSize = 25,
 }: DataTableDemoProps) {
@@ -130,7 +130,7 @@ export function DataTableDemo({
 
   React.useEffect(() => {
     let mounted = true;
-    if (!organizationId || !siteId) {
+    if (!organizationId || !locationId) {
       setData([]);
       setLoading(false);
       return;
@@ -139,11 +139,11 @@ export function DataTableDemo({
     setLoading(true);
     const fetchData = async () => {
       const { data: files, error } = await supabase
-        .from("uploaded_esg_files_construction")
+        .from("company_raw_uploads")
         .select("*")
         .eq("organization_id", organizationId)
-        .eq("file_site_id", siteId)
-        .order("created_at", { ascending: false })
+        .eq("company_location_id", locationId)
+        .order("uploaded_at", { ascending: false })
         .limit(pageSize);
 
       if (!mounted) return;
@@ -161,7 +161,7 @@ export function DataTableDemo({
     return () => {
       mounted = false;
     };
-  }, [supabase, organizationId, siteId, pageSize]);
+  }, [supabase, organizationId, locationId, pageSize]);
 
   const table = useReactTable({
     data,

@@ -1,78 +1,50 @@
 import { auth } from "@clerk/nextjs/server";
-import { redirect, notFound } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
-
+import { redirect } from "next/navigation";
+import { hasOrgAdminPower, normalizeAppRole } from "@/utils/roles";
 
 export default async function RedirectPage() {
-  const { userId, orgId, orgRole, sessionClaims } = await auth();
-  if (!userId) return redirect("/sign-in");
-  
-  // // if user has no org selected → force onboarding
-  // const orgs = (await clerkClient()).organizations.getOrganizationMembershipList({ userId })
+  const { userId, sessionClaims, orgRole, orgId, orgSlug } = await auth();
 
-  // if (orgs.length === 0) {
-  // No orgs → force onboarding
-  //   return redirect("/onboarding/org-setup");
-  // }
-  if (!orgId) return redirect("/onboarding/org-setup");
-
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-
-  // Fetch authoritative org row by clerk_org_id
-  const { data: orgRow, error } = await supabase
-    .from("clerk_organisations")
-    .select(
-      "slug, headquarter_location_id, locations_id, onboarding_step1, onboarding_step2"
-    )
-    .eq("clerk_org_id", orgId)
-    .single();
-
-  if (error || !orgRow) {
-    // No DB row — treat as uninitialized org
-    return redirect("/onboarding/org-setup");
+  // 1️⃣ Not authenticated → sign in
+  if (!userId) {
+    return redirect("/sign-in");
   }
 
-  const { slug, headquarter_location_id, onboarding_step1, onboarding_step2 } =
-    orgRow;
+  // 2️⃣ Extract metadata used for location-scoped access only
+  const userMetadata = sessionClaims?.user_public_metadata as
+    | {
+        allowed_locations?: string[];
+        org_slug?: string;
+      }
+    | undefined;
 
-  //const slug = orgRow.slug;
-  // const hq = orgRow.headquarter_location_id;
-  
+  const role = normalizeAppRole({ orgRole });
+  const allowedLocations = userMetadata?.allowed_locations || [];
+  const orgPathSegment = orgSlug || userMetadata?.org_slug || orgId;
 
-  const isAdmin = orgRole === "org:admin" || orgRole === "org:owner";
-  if (isAdmin) {
-    // Step 1 not done: org setup
-    if (!onboarding_step1) {
-      return redirect("/onboarding/org-setup");
-    }
-
-    // Step 2 not done: emissions setup
-    if (onboarding_step1 && !onboarding_step2) {
-      return redirect("/onboarding/emission-estimates");
-    }
-
-    // All done but no HQ? Back to setup
-    if (!headquarter_location_id) {
-      return redirect("/onboarding/org-setup");
-    }
-
-    // All complete → dashboard
-    return redirect(`/orgs/${slug}/${headquarter_location_id}/dashboard`);
-    // if (headquarter_location_id) return redirect(`/orgs/${slug}/${headquarter_location_id}/dashboard`);
-    // // if HQ missing but admin — send to onboarding to fix HQ
-    // return redirect("/onboarding/org-setup");
+  // 3️⃣ Validation: must have an active org
+  if (!orgId) {
+    return redirect("/no-access");
   }
 
-  //for members, check allowed locations from session claims
-  const allowed: string[] =
-    sessionClaims?.user_public_metadata?.allowed_locations || [];
-  // member -> redirect to first allowed location
-  if (allowed.length > 0)
-    return redirect(`/orgs/${slug}/${allowed[0]}/dashboard`);
+  // 4️⃣ Org admins/owners → org dashboard
+  if (hasOrgAdminPower(role)) {
+    return redirect(`/orgs/${orgPathSegment}/dashboard`);
+  }
 
-  // fallback: no location for member -> 404
-  return notFound();
+  // 5️⃣ Manager or Member → redirect to first allowed location
+  if (role === "manager" || role === "member") {
+    // Check if user has allowed locations
+    if (!allowedLocations || allowedLocations.length === 0) {
+      return redirect("/no-access");
+    }
+
+    const firstLocation = allowedLocations[0];
+    return redirect(
+      `/orgs/${orgPathSegment}/locations/${firstLocation}/dashboard`,
+    );
+  }
+
+  // 6️⃣ Unknown role → no access
+  return redirect("/no-access");
 }

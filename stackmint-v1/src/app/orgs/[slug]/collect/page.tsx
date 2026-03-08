@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useDropzone } from "react-dropzone";
 import { useUser, useSession, useOrganization } from "@clerk/nextjs";
-import { createClient } from "@supabase/supabase-js";
 import {
   Dialog,
   DialogContent,
@@ -14,27 +13,24 @@ import {
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { DataTableDemo } from "@/components/file-table";
-// import calendar component replaced by simple date input
-// import { Calendar23 } from "@/components/calendar-23";
-// import { type DateRange } from "react-day-picker";
+import { Calendar23 } from "@/components/calendar-23";
+import { type DateRange } from "react-day-picker";
 import { v4 as uuidv4 } from "uuid";
+import { useParams } from "next/navigation";
+import { createClerkSupabaseClient } from "@/lib/supabase-client";
 import { activityTypes } from "@/lib/activity_types_schema";
 
-type Site = {
-  id: string; // Assuming you have an ID field
-  site_name: string;
-  site_slug: string;
-  site_location: string;
-};
 
 export default function FileUploader() {
+  const { locationId } = useParams<{ locationId: string }>();
+  const { user } = useUser();
+  const { session } = useSession();
+  const { organization } = useOrganization();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [activityType, setActivityType] = useState<string>("");
   const [isUploading, setIsUploading] = useState(false);
-
-  const { user } = useUser();
-  const { session } = useSession();
+  const [range, setRange] = useState<DateRange | undefined>();
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: (acceptedFiles) => {
@@ -45,73 +41,98 @@ export default function FileUploader() {
     },
   });
 
-  function createClerkSupabaseClient() {
-    return createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        async accessToken() {
-          return session?.getToken() ?? null;
-        },
-      },
-    );
-  }
+  const supabase = useMemo(
+    () =>
+      createClerkSupabaseClient(
+        () => session?.getToken?.() ?? Promise.resolve(null),
+      ),
+    [session],
+  );
 
-  const client = createClerkSupabaseClient();
-  const { organization } = useOrganization();
-
-  useEffect(() => {
-    // site fetching removed - not needed for now
-  }, []);
+  // useEffect(() => {
+  //   if (!organization) return;
+  //   const fetchSites = async () => {
+  //     const { data: siteData, error: siteError } = await supabase
+  //       .from("construction_sites")
+  //       .select("*")
+  //       .eq("organization_id", organization.id)
+  //       .eq("site_slug", locationSlug);
+  //     if (siteError) {
+  //       console.error(
+  //         "Error fetching sites something wrong with use Effect:",
+  //         siteError,
+  //       );
+  //     } else {
+  //       setSite(siteData ? siteData[0] : undefined); // since we are only fetching one site based on the slug
+  //       console.log("Fetched sites:", siteData);
+  //       // Set default selected site to the first one
+  //       if (siteData && siteData.length > 0) {
+  //         setSelectedSite(siteData[0]);
+  //       }
+  //     }
+  //   };
+  //   fetchSites();
+  // }, [organization, supabase]);
 
   const handleUpload = async () => {
     if (!selectedFile || !user || !session || !organization) return;
-    console.log("Uploading file with activity type:", activityType);
+    console.log(
+      "there either user file or session isnt present from marvis",
+      //selectedSite
+    );
 
     setIsUploading(true);
-
-    //const client = createClerkSupabaseClient();
-
     //const path = `public/${type}/${user.id}_${selectedFile.name}`;
     const safeName = selectedFile.name.replace(/\s+/g, "_");
     const uniqueSuffix = uuidv4();
     const uniqueFileName = `${user.id}_${uniqueSuffix}_${safeName}`;
-    const filePath = `${organization.id}/${uniqueFileName}`;
+    const filePath = `${organization.id}/${
+      locationId || "unknown"
+      }/${uniqueFileName}`;
+    
     let row_id;
 
     const metadata = {
       file_name: safeName,
-      organization_id: organization.id,
-      file_type: selectedFile.type,
+      // I need to change this in the future so that it actually goes to the correct path link
       storage_path: filePath,
-      upload_method: "manual",
+      //public_file_url: publicUrlData?.publicUrl ?? null,
       uploaded_by: user.id,
+      file_type: selectedFile.type,
+      user_name: user.fullName,
+      organization_id: organization.id,
+      //file_site_id: site?.id, // this was originally selectedSite?.id ive changed to just Site
+      //start_date: range?.from?.toISOString().slice(0, 10),
+      //end_date: range?.to?.toISOString().slice(0, 10),
+      activity_type: activityType,
+      upload_method: "manual",
       uploaded_at: new Date().toISOString(),
       parsing_status: "pending",
-      activity_type: activityType,
+      // i need this so i know where each file comes from etc.
+      company_location_id: locationId, // this very wrong i need to find a way to reference the comapnny location id.
     };
 
-    const { data, error } = await client.storage
+    const { error } = await supabase.storage
       .from("esg-data-2")
       .upload(filePath, selectedFile, {
         // upsert = false if it doesnt work
         contentType: selectedFile.type || "application/octet-stream",
       });
+    console.log("MIME TYPE:", selectedFile.type);
 
     if (error) {
       console.error("Upload error:", error);
       toast.error(`Upload failed: ${error.message}`);
       setIsUploading(false);
     } else {
-      console.log("Upload successful:", data);
       setModalOpen(false);
       setSelectedFile(null);
       toast.success("Succesfully uploaded to database");
       setIsUploading(false);
 
       console.log("Trying to insert metadata:", metadata);
-      const { data: tableData, error: tableError } = await client
-        .from("company_raw_uploads")
+      const { data: tableData, error: tableError } = await supabase
+        .from("comapany_raw_uploads")
         .insert([metadata])
         .select();
 
@@ -124,32 +145,36 @@ export default function FileUploader() {
         console.log("Insert successful, row ID:", row_id);
       }
     }
-
-    try {
-      const res = await fetch("http://localhost:8001/analyze", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          file_url: filePath,
-          row_id: row_id,
-          activity_type: activityType,
-        }),
-      });
-
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error("Server error:", errorText);
-      } else {
-        const result = await res.json();
-        console.log("Server response (most likely successful):", result);
-      }
-      // https://ycyfqlehnoruigtrxixc.supabase.co/storage/v1/object/public/esg-data-2/
-    } catch (err) {
-      console.error("Failed to contact backend (fetch error):", err);
-    }
   };
+
+  //   try {
+  //     const res = await fetch(
+  //       "https://glowing-parakeet-7jqvjqg9xvpcpg5-8001.app.github.dev/analyze",
+  //       {
+  //         method: "POST",
+  //         headers: {
+  //           "Content-Type": "application/json",
+  //         },
+  //         body: JSON.stringify({
+  //           file_url: filePath,
+  //           row_id: row_id,
+  //           category: site,
+  //         }),
+  //       },
+  //     );
+
+  //     if (!res.ok) {
+  //       const errorText = await res.text();
+  //       console.error("Server error:", errorText);
+  //     } else {
+  //       const result = await res.json();
+  //       console.log("Server response (most likely successful):", result);
+  //     }
+  //     // https://ycyfqlehnoruigtrxixc.supabase.co/storage/v1/object/public/esg-data-2/
+  //   } catch (err) {
+  //     console.error("Failed to contact backend (fetch error):", err);
+  //   }
+  // };
 
   return (
     <>
@@ -157,7 +182,7 @@ export default function FileUploader() {
         <Dialog open={modalOpen} onOpenChange={setModalOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Select activity type</DialogTitle>
+              <DialogTitle>Select Activity type</DialogTitle>
               <DialogDescription>
                 Current file: <strong>{selectedFile.name}</strong>
               </DialogDescription>
@@ -187,6 +212,8 @@ export default function FileUploader() {
                 }
               </p>
             </label>
+
+            {/* <Calendar23 range={range} setRange={setRange} /> */}
 
             <Button
               className="mt-4 w-full"
@@ -233,7 +260,7 @@ export default function FileUploader() {
             </p>
           </div>
           {/* Replace "your_table_name" with your actual Supabase table name */}
-          <DataTableDemo organizationId={organization?.id || ""} />
+          <DataTableDemo organizationId={organization?.id!}/>
         </div>
       </section>
     </>
