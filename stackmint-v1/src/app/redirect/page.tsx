@@ -1,50 +1,59 @@
-import { auth } from "@clerk/nextjs/server";
-import { redirect } from "next/navigation";
-import { hasOrgAdminPower, normalizeAppRole } from "@/utils/roles";
+"use client";
 
-export default async function RedirectPage() {
-  const { userId, sessionClaims, orgRole, orgId, orgSlug } = await auth();
+import * as React from "react";
+import { useAuth } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
 
-  // 1️⃣ Not authenticated → sign in
-  if (!userId) {
-    return redirect("/sign-in");
-  }
+type UserMetadata = {
+  allowed_locations?: string[];
+  org_slug?: string;
+};
 
-  // 2️⃣ Extract metadata used for location-scoped access only
-  const userMetadata = sessionClaims?.user_public_metadata as
-    | {
-        allowed_locations?: string[];
-        org_slug?: string;
-      }
-    | undefined;
+export default function RedirectPage() {
+  const router = useRouter();
+  const { isLoaded, userId, orgId, orgSlug, orgRole, sessionClaims } =
+    useAuth();
 
-  const role = normalizeAppRole({ orgRole });
-  const allowedLocations = userMetadata?.allowed_locations || [];
-  const orgPathSegment = orgSlug || userMetadata?.org_slug || orgId;
+  React.useEffect(() => {
+    if (!isLoaded) return;
 
-  // 3️⃣ Validation: must have an active org
-  if (!orgId) {
-    return redirect("/no-access");
-  }
-
-  // 4️⃣ Org admins/owners → org dashboard
-  if (hasOrgAdminPower(role)) {
-    return redirect(`/orgs/${orgPathSegment}/dashboard`);
-  }
-
-  // 5️⃣ Manager or Member → redirect to first allowed location
-  if (role === "manager" || role === "member") {
-    // Check if user has allowed locations
-    if (!allowedLocations || allowedLocations.length === 0) {
-      return redirect("/no-access");
+    if (!userId) {
+      router.replace("/sign-in");
+      return;
     }
 
-    const firstLocation = allowedLocations[0];
-    return redirect(
-      `/orgs/${orgPathSegment}/locations/${firstLocation}/dashboard`,
-    );
-  }
+    if (!orgId) {
+      router.replace("/no-access");
+      return;
+    }
 
-  // 6️⃣ Unknown role → no access
-  return redirect("/no-access");
+    const userMetadata =
+      (sessionClaims?.user_public_metadata as UserMetadata | undefined) || {};
+    const allowedLocations = userMetadata.allowed_locations || [];
+    const orgPathSegment = orgSlug || userMetadata.org_slug || orgId;
+    const isOrgAdmin = orgRole === "org:owner" || orgRole === "org:admin";
+
+    if (isOrgAdmin) {
+      router.replace(`/orgs/${orgPathSegment}/dashboard`);
+      return;
+    }
+
+    if (allowedLocations.length > 0) {
+      router.replace(
+        `/orgs/${orgPathSegment}/locations/${allowedLocations[0]}/dashboard`,
+      );
+      return;
+    }
+
+    router.replace("/no-access");
+  }, [isLoaded, orgId, orgRole, orgSlug, router, sessionClaims, userId]);
+
+  return (
+    <div className="min-h-[60vh] w-full flex items-center justify-center">
+      <div className="flex items-center gap-3 text-sm text-muted-foreground">
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
+        <span>Preparing your workspace...</span>
+      </div>
+    </div>
+  );
 }

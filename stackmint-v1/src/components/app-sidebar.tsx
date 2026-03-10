@@ -78,11 +78,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           icon: LayoutDashboard,
         },
         {
-          title: "Locations",
-          url: orgPathSegment ? `/orgs/${orgPathSegment}/locations` : "#",
-          icon: Map,
-        },
-        {
           title: "Reports",
           url: locationBase
             ? `${locationBase}/reports`
@@ -101,6 +96,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           icon: Library,
         },
       ];
+
+    if (canManageTeam || isOrgAdmin) {
+      items.splice(1, 0, {
+        title: "Locations",
+        url: orgPathSegment ? `/orgs/${orgPathSegment}/locations` : "#",
+        icon: Map,
+      });
+    }
 
     if (locationBase) {
       items.push({
@@ -137,11 +140,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         },
         {
           title: "Integrations",
-          url: locationBase
-            ? `${locationBase}/instegrations`
-            : orgPathSegment
-              ? `/orgs/${orgPathSegment}/integrations`
-              : "#",
+          url: orgPathSegment ? `/orgs/${orgPathSegment}/integrations` : "#",
           icon: Blocks,
         },
       );

@@ -1,4 +1,5 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { createClient } from "@supabase/supabase-js";
 import { hasOrgAdminPower, normalizeAppRole } from "@/utils/roles";
 
 // ============================================
@@ -17,6 +18,11 @@ const publicRoutes = createRouteMatcher([
 
 const adminRoutes = createRouteMatcher(["/admin(.*)"]);
 const orgAreaRoutes = createRouteMatcher(["/orgs/(.*)"]);
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+);
 
 // ============================================
 // Helper Functions
@@ -96,6 +102,13 @@ export default clerkMiddleware(async (auth, req) => {
   const orgPathSegment =
     extractOrgPathSegment(pathname) || orgSlug || userMetadata?.org_slug || orgId || "";
 
+  // 4b. Guardrail: org segment must match the active org slug when available.
+  if (orgAreaRoutes(req) && orgSlug && extractOrgPathSegment(pathname) && extractOrgPathSegment(pathname) !== orgSlug) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/no-access";
+    return Response.redirect(url);
+  }
+
   // 5️⃣ Org area routes: enforce access control
   if (orgAreaRoutes(req)) {
     // 5a. User must have an active org context
@@ -103,6 +116,22 @@ export default clerkMiddleware(async (auth, req) => {
       const url = req.nextUrl.clone();
       url.pathname = "/no-access";
       return Response.redirect(url);
+    }
+
+    // 5a-bis. Guardrail: path org slug must match authoritative org slug from DB.
+    const pathOrgSegment = extractOrgPathSegment(pathname);
+    if (pathOrgSegment) {
+      const { data: orgRow, error: orgError } = await supabase
+        .from("clerk_organisations")
+        .select("slug")
+        .eq("clerk_org_id", orgId)
+        .maybeSingle();
+
+      if (orgError || !orgRow || orgRow.slug !== pathOrgSegment) {
+        const url = req.nextUrl.clone();
+        url.pathname = "/no-access";
+        return Response.redirect(url);
+      }
     }
 
     // 5b. Check if this is an org-level route (not a location route)
@@ -129,6 +158,20 @@ export default clerkMiddleware(async (auth, req) => {
 
       if (!locationId) {
         // Malformed URL
+        const url = req.nextUrl.clone();
+        url.pathname = "/no-access";
+        return Response.redirect(url);
+      }
+
+      // Ensure location exists and belongs to the active org.
+      const { data: locationRow, error: locationError } = await supabase
+        .from("company_locations")
+        .select("id")
+        .eq("id", locationId)
+        .eq("organization_id", orgId)
+        .maybeSingle();
+
+      if (locationError || !locationRow) {
         const url = req.nextUrl.clone();
         url.pathname = "/no-access";
         return Response.redirect(url);

@@ -1,23 +1,21 @@
 // app/orgs/[slug]/dashboard/page.tsx
-import { auth } from '@clerk/nextjs/server';
-import { redirect } from 'next/navigation';
-import { ChartAreaInteractive } from "@/components/chart-area-interactive"
-import { DataTable } from "@/components/data-table"
-import { SectionCards } from "@/components/section-cards"
+import { auth } from "@clerk/nextjs/server";
+import { redirect } from "next/navigation";
+import { ChartAreaInteractive } from "@/components/chart-area-interactive";
+import { DataTable } from "@/components/data-table";
+import { SectionCards } from "@/components/section-cards";
 
-import data from "./data.json"
+import data from "./data.json";
 
+export default async function DashboardPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  await params;
+  const { userId } = await auth();
 
-export default async function DashboardPage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
-  const { userId, orgSlug } = await auth();
-
-  if (!userId) return redirect('/sign-in');
-
-  // If current orgSlug doesn't match URL slug, ask user to switch
-  if (!orgSlug || orgSlug !== slug) {
-    return redirect(`/orgs/${orgSlug}/dashboard`);
-  }
+  if (!userId) return redirect("/sign-in");
 
   return (
     <>
