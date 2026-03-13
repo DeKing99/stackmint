@@ -1,8 +1,9 @@
 from typing import Any, Dict, Mapping, Optional, List
 from decimal import Decimal, InvalidOperation
-from uuid import UUID
+from datetime import datetime
 
 from supabase import Client
+from parsing.schemas import SCHEMAS
 
 
 class EmissionsCalculationError(Exception):
@@ -26,10 +27,96 @@ def _safe_get_decimal(data: Mapping[str, Any], key: str) -> Optional[Decimal]:
     return None
 
 
+def _safe_get_int(data: Mapping[str, Any], key: str) -> Optional[int]:
+    value = data.get(key)
+
+    if isinstance(value, int):
+        return value
+
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+
+    return None
+
+
+def _resolve_activity_value(row: Mapping[str, Any], activity_type: str) -> Optional[Decimal]:
+    # Backward compatibility: honor pre-normalized "value" when present.
+    direct_value = _safe_get_decimal(row, "value")
+    if direct_value is not None:
+        return direct_value
+
+    schema = SCHEMAS.get(activity_type, {})
+    schema_fields = schema.get("fields", {}) if isinstance(schema, Mapping) else {}
+
+    # Use the first numeric schema field found in the row.
+    for field_name, field_def in schema_fields.items():
+        if not isinstance(field_def, Mapping):
+            continue
+        if field_def.get("type") != "float":
+            continue
+
+        parsed = _safe_get_decimal(row, str(field_name))
+        if parsed is not None:
+            return parsed
+
+    return None
+
+
+def _fetch_emission_factor(
+    supabase: Client,
+    activity_type: str,
+    unit: Optional[str],
+    region: Optional[str],
+    year: Optional[int],
+) -> Optional[Mapping[str, Any]]:
+    attempts: List[tuple[bool, bool, bool]] = []
+
+    if unit:
+        if region and year is not None:
+            attempts.append((True, True, True))
+        if region:
+            attempts.append((True, False, True))
+        if year is not None:
+            attempts.append((False, True, True))
+        attempts.append((False, False, True))
+
+    if region and year is not None:
+        attempts.append((True, True, False))
+    if region:
+        attempts.append((True, False, False))
+    if year is not None:
+        attempts.append((False, True, False))
+    attempts.append((False, False, False))
+
+    for use_region, use_year, use_unit in attempts:
+        query = (
+            supabase.table("emission_factors")
+            .select("*")
+            .eq("activity_type", activity_type)
+        )
+
+        if use_unit and unit:
+            query = query.eq("unit", unit)
+
+        if use_region and region:
+            query = query.eq("region", region)
+
+        if use_year and year is not None:
+            query = query.eq("year", year)
+
+        response = query.limit(1).execute()
+        if response.data:
+            row = response.data[0]
+            if isinstance(row, Mapping):
+                return row
+
+    return None
+
+
 def calculate_emissions_for_row(
     supabase: Client,
     row: Dict[str, Any],
-    company_id: UUID,
+    activity_id: str,
 ) -> Dict[str, Any]:
     """
     Synchronous, enterprise-safe emissions calculation.
@@ -41,43 +128,25 @@ def calculate_emissions_for_row(
 
     activity_type = _safe_get_str(row, "activity_type")
     unit = _safe_get_str(row, "unit")
-    value = _safe_get_decimal(row, "value")
+    value = _resolve_activity_value(row, activity_type or "")
     region = _safe_get_str(row, "region")
-    year_raw = row.get("year")
+    year = _safe_get_int(row, "year")
 
-    if not activity_type or not unit or value is None:
+    if not activity_type or value is None:
         raise EmissionsCalculationError("Missing required emissions fields")
 
-    year: Optional[int] = None
-    if isinstance(year_raw, int):
-        year = year_raw
-    elif isinstance(year_raw, str) and year_raw.isdigit():
-        year = int(year_raw)
-
-    query = (
-        supabase.table("emission_factors")
-        .select("*")
-        .eq("activity_type", activity_type)
-        .eq("unit", unit)
+    factor_row = _fetch_emission_factor(
+        supabase=supabase,
+        activity_type=activity_type,
+        unit=unit,
+        region=region,
+        year=year,
     )
 
-    if region:
-        query = query.eq("region", region)
-
-    if year:
-        query = query.eq("year", year)
-
-    response = query.limit(1).execute()
-
-    if not response.data:
+    if not factor_row:
         raise EmissionsCalculationError(
-            f"No emission factor found for {activity_type}/{unit}"
+            f"No emission factor found for activity_type={activity_type}"
         )
-
-    factor_row = response.data[0]
-
-    if not isinstance(factor_row, Mapping):
-        raise EmissionsCalculationError("Invalid emission factor row")
 
     factor_raw = factor_row.get("factor_value")
 
@@ -89,22 +158,17 @@ def calculate_emissions_for_row(
     emissions_value = value * factor
 
     return {
-        "company_id": str(company_id),
-        "upload_id": row.get("upload_id"),
-        "row_index": row.get("row_index"),
-        "activity_type": activity_type,
-        "value": float(value),
-        "unit": unit,
-        "emissions_value": float(emissions_value),
-        "region": region,
-        "year": year,
+        "activity_id": activity_id,
+        "emission_factor_id": factor_row.get("id"),
+        "co2e": float(emissions_value),
+        "calculated_at": datetime.utcnow().isoformat(),
     }
 
 
 def calculate_emissions_for_batch(
     supabase: Client,
-    company_id: UUID,
     rows: List[Dict[str, Any]],
+    inserted_activities: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
     """
     Batch-safe emissions calculation.
@@ -113,12 +177,17 @@ def calculate_emissions_for_batch(
 
     emissions_rows: List[Dict[str, Any]] = []
 
-    for row in rows:
+    for index, row in enumerate(rows):
         try:
+            activity = inserted_activities[index] if index < len(inserted_activities) else None
+            activity_id = activity.get("id") if isinstance(activity, Mapping) else None
+            if not isinstance(activity_id, str) or not activity_id:
+                continue
+
             result = calculate_emissions_for_row(
                 supabase=supabase,
                 row=row,
-                company_id=company_id,
+                activity_id=activity_id,
             )
             emissions_rows.append(result)
         except EmissionsCalculationError:

@@ -161,6 +161,39 @@ COLUMN_ALIASES: Dict[str, Dict[str, list]] = {
     },
 }
 
+# Backward-compatible alias fallbacks for renamed/merged activity types.
+LEGACY_ACTIVITY_ALIAS_FALLBACKS: Dict[str, str] = {
+    "stationary_combustion": "fuel_combustion",
+    "fugitive_emissions": "refrigerant_leakage",
+    "upstream_transport": "transport_and_distribution",
+    "downstream_transport": "transport_and_distribution",
+    "purchased_electricity": "energy_usage",
+    "purchased_steam": "energy_usage",
+    "purchased_heating": "energy_usage",
+    "purchased_cooling": "energy_usage",
+}
+
+LEGACY_SCHEMA_FIELD_RENAMES: Dict[str, Dict[str, str]] = {
+    "mobile_combustion": {
+        "fuel_quantity": "consumption",
+        "vehicle_type": "vehicle_id",
+    },
+    "stationary_combustion": {
+        "fuel_quantity": "consumption",
+    },
+    "fugitive_emissions": {
+        "refrigerant_type": "gas_type",
+        "quantity": "amount_released",
+    },
+    "waste_generated": {
+        "quantity": "amount",
+    },
+    "purchased_goods": {
+        "material_type": "category",
+        "amount": "amount_spent",
+    },
+}
+
 # -----------------------------
 # Utilities
 # -----------------------------
@@ -191,14 +224,27 @@ def normalize_columns(
         raise ValueError(f"Unknown activity type: {activity_type}")
 
     schema_fields = SCHEMAS[activity_type]["fields"].keys()
-    
+    schema_field_set = set(schema_fields)
+
     activity_aliases = COLUMN_ALIASES.get(activity_type, {})
-    # Optional safety check
-    for alias_field in activity_aliases.keys():
-        if alias_field not in schema_fields:
-            raise ValueError(
-                f"Alias defined for unknown schema field: {alias_field}"
-            )
+    if not activity_aliases and activity_type in LEGACY_ACTIVITY_ALIAS_FALLBACKS:
+        legacy_key = LEGACY_ACTIVITY_ALIAS_FALLBACKS[activity_type]
+        activity_aliases = COLUMN_ALIASES.get(legacy_key, {})
+
+    legacy_field_renames = LEGACY_SCHEMA_FIELD_RENAMES.get(activity_type, {})
+
+    # Normalize stale alias entries to current schema field names and drop unsupported ones.
+    normalized_activity_aliases: Dict[str, list] = {}
+    for alias_field, aliases in activity_aliases.items():
+        target_field = legacy_field_renames.get(alias_field, alias_field)
+        if target_field not in schema_field_set:
+            continue
+
+        if target_field not in normalized_activity_aliases:
+            normalized_activity_aliases[target_field] = []
+        normalized_activity_aliases[target_field].extend(aliases)
+
+    activity_aliases = normalized_activity_aliases
 
 
     normalized = {}

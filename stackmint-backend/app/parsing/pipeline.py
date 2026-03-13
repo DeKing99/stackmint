@@ -1,11 +1,13 @@
 import time
 import logging
 from typing import Dict, Any, List, cast
+from pathlib import Path
 
 from parsing.extractors import extract_rows
 from parsing.mapping import normalize_columns
 from parsing.validation import validate_row, ValidationError
 from parsing.pdf import extract_pdf_with_ai
+from parsing.storage import resolve_upload_file_path
 
 from db.uploads import mark_as_completed, mark_as_failed
 from db.mappings import get_upload_mapping
@@ -16,7 +18,6 @@ from db.logs import log_parsing_event
 from parsing.emissions import calculate_emissions_for_batch
 
 from supabase import create_client
-from uuid import UUID
 import os
 
 logger = logging.getLogger(__name__)
@@ -29,21 +30,24 @@ def run_parsing_pipeline(upload: Dict[str, Any]) -> Dict[str, Any]:
 
     upload_id = upload["id"]
     activity_type = upload["activity_type"]
-    file_path = upload["file_path"]
+    temp_file_path: str | None = None
 
     validated_rows: List[Dict[str, Any]] = []
     errors: List[Dict[str, Any]] = []
 
     try:
 
+        local_file_path, temp_file_path = resolve_upload_file_path(upload)
+        working_upload = {**upload, "file_path": local_file_path}
+
         # -----------------------------------------
         # 1️⃣ Extract rows
         # -----------------------------------------
 
-        if file_path.lower().endswith(".pdf"):
-            raw_rows = extract_pdf_with_ai(file_path, activity_type)
+        if local_file_path.lower().endswith(".pdf"):
+            raw_rows = extract_pdf_with_ai(local_file_path, activity_type)
         else:
-            raw_rows = extract_rows(upload)
+            raw_rows = extract_rows(working_upload)
 
         # -----------------------------------------
         # 2️⃣ Load company mappings
@@ -52,7 +56,7 @@ def run_parsing_pipeline(upload: Dict[str, Any]) -> Dict[str, Any]:
         #mapping_record = get_upload_mapping(upload_id)
         #company_mappings = mapping_record.get("mappings") if mapping_record else {}
         
-        mapping_record_raw = get_upload_mapping(upload_id)
+        mapping_record_raw = get_upload_mapping(upload)
         
         company_mappings: Dict[str, str] = {}
 
@@ -85,8 +89,12 @@ def run_parsing_pipeline(upload: Dict[str, Any]) -> Dict[str, Any]:
                     activity_type
                 )
 
+                # Keep activity type on each row so emissions lookup can match factors.
+                validated_row["activity_type"] = activity_type
                 validated_row["upload_id"] = upload_id
                 validated_row["row_index"] = idx
+                validated_row["organization_id"] = upload.get("organization_id")
+                validated_row["company_location_id"] = upload.get("company_location_id") or upload.get("file_site_id")
 
                 validated_rows.append(validated_row)
 
@@ -95,6 +103,7 @@ def run_parsing_pipeline(upload: Dict[str, Any]) -> Dict[str, Any]:
                     "row_index": idx,
                     "error": str(ve),
                 })
+                log_parsing_event(upload_id, "ERROR", str(ve), row_number=idx)
 
         # -----------------------------------------
         # 4️⃣ Fail if too many errors
@@ -111,7 +120,7 @@ def run_parsing_pipeline(upload: Dict[str, Any]) -> Dict[str, Any]:
         # 5️⃣ Insert activities
         # -----------------------------------------
 
-        insert_activities(validated_rows)
+        inserted_activities = insert_activities(validated_rows)
 
         # -----------------------------------------
         
@@ -121,17 +130,16 @@ def run_parsing_pipeline(upload: Dict[str, Any]) -> Dict[str, Any]:
             os.environ["SUPABASE_SERVICE_ROLE_KEY"],
         )
 
-        company_id = UUID(upload["company_id"])
-        # 6️⃣ (Optional) Emissions
-        
+        # 6️⃣ Emissions based on inserted activity IDs
         emissions_rows = calculate_emissions_for_batch(
             supabase=supabase,
-            company_id=company_id,
             rows=validated_rows,
+            inserted_activities=inserted_activities,
         )
-
         if emissions_rows:
             insert_emissions(emissions_rows)
+        else:
+            log_parsing_event(upload_id, "WARN", "No emissions rows were calculated")
             
         # -----------------------------------------
         # Skipped for now unless emissions.py confirmed working
@@ -160,3 +168,9 @@ def run_parsing_pipeline(upload: Dict[str, Any]) -> Dict[str, Any]:
         log_parsing_event(upload_id, "ERROR", str(e))
 
         raise
+    finally:
+        if temp_file_path and Path(temp_file_path).exists():
+            try:
+                Path(temp_file_path).unlink()
+            except Exception:
+                pass

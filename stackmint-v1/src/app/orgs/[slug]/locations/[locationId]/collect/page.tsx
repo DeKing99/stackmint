@@ -20,6 +20,11 @@ import { useParams } from "next/navigation";
 import { createClerkSupabaseClient } from "@/lib/supabase-client";
 import { activityTypes } from "@/lib/activity_types_schema";
 
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
 
 export default function FileUploader() {
   const { locationId } = useParams<{ locationId: string }>();
@@ -82,14 +87,35 @@ export default function FileUploader() {
     );
 
     setIsUploading(true);
+
+    let resolvedOrganizationId = organization.id;
+    if (!isUuid(resolvedOrganizationId)) {
+      const { data: orgRow } = await supabase
+        .from("clerk_organisations")
+        .select("id")
+        .eq("clerk_org_id", organization.id)
+        .maybeSingle();
+
+      if (!orgRow?.id) {
+        toast.error("Could not resolve organization UUID for upload.");
+        setIsUploading(false);
+        return;
+      }
+
+      resolvedOrganizationId = orgRow.id;
+    }
+
+    const resolvedUploadedBy = isUuid(user.id)
+      ? user.id
+      : resolvedOrganizationId;
     //const path = `public/${type}/${user.id}_${selectedFile.name}`;
     const safeName = selectedFile.name.replace(/\s+/g, "_");
     const uniqueSuffix = uuidv4();
     const uniqueFileName = `${user.id}_${uniqueSuffix}_${safeName}`;
     const filePath = `${organization.id}/${
       locationId || "unknown"
-      }/${uniqueFileName}`;
-    
+    }/${uniqueFileName}`;
+
     let row_id;
 
     const metadata = {
@@ -97,10 +123,10 @@ export default function FileUploader() {
       // I need to change this in the future so that it actually goes to the correct path link
       storage_path: filePath,
       //public_file_url: publicUrlData?.publicUrl ?? null,
-      uploaded_by: user.id,
+      uploaded_by: resolvedUploadedBy,
       file_type: selectedFile.type,
       user_name: user.fullName,
-      organization_id: organization.id,
+      organization_id: resolvedOrganizationId,
       //file_site_id: site?.id, // this was originally selectedSite?.id ive changed to just Site
       //start_date: range?.from?.toISOString().slice(0, 10),
       //end_date: range?.to?.toISOString().slice(0, 10),
@@ -109,7 +135,7 @@ export default function FileUploader() {
       uploaded_at: new Date().toISOString(),
       parsing_status: "pending",
       // i need this so i know where each file comes from etc.
-      company_location_id: locationId, // this very wrong i need to find a way to reference the comapnny location id.
+      company_location_id: locationId,
     };
 
     const { error } = await supabase.storage
@@ -132,7 +158,7 @@ export default function FileUploader() {
 
       console.log("Trying to insert metadata:", metadata);
       const { data: tableData, error: tableError } = await supabase
-        .from("comapany_raw_uploads")
+        .from("company_raw_uploads")
         .insert([metadata])
         .select();
 
@@ -260,7 +286,10 @@ export default function FileUploader() {
             </p>
           </div>
           {/* Replace "your_table_name" with your actual Supabase table name */}
-          <DataTableDemo organizationId={organization?.id!}/>
+          <DataTableDemo
+            organizationId={organization?.id!}
+            locationId={locationId}
+          />
         </div>
       </section>
     </>

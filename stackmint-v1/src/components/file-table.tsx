@@ -40,6 +40,7 @@ import { createClerkSupabaseClient } from "@/lib/supabase-client";
 export type UploadedFile = {
   id: string;
   file_name: string;
+  company_location_id?: string;
   file_site_id: string;
   file_url: string;
   user_id?: string;
@@ -77,9 +78,15 @@ export const columns: ColumnDef<UploadedFile>[] = [
     cell: ({ row }) => <div>{row.getValue("file_name")}</div>,
   },
   {
-    accessorKey: "file_site_id",
-    header: "Site ID",
-    cell: ({ row }) => <div>{row.getValue("file_site_id")}</div>,
+    accessorKey: "company_location_id",
+    header: "Location ID",
+    cell: ({ row }) => (
+      <div>
+        {(row.getValue("company_location_id") as string) ||
+          row.original.file_site_id ||
+          "-"}
+      </div>
+    ),
   },
   {
     accessorKey: "user_name",
@@ -98,7 +105,8 @@ export const columns: ColumnDef<UploadedFile>[] = [
 
 interface DataTableDemoProps {
   organizationId: string;
-  locationId?: string | null; // expects file_site_id (not slug)
+  locationId?: string | null;
+  siteId?: string | null;
   onSelectionChange?: (rows: UploadedFile[]) => void;
   pageSize?: number;
 }
@@ -106,12 +114,13 @@ interface DataTableDemoProps {
 export function DataTableDemo({
   organizationId,
   locationId,
+  siteId,
   onSelectionChange,
   pageSize = 25,
 }: DataTableDemoProps) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
-    []
+    [],
   );
   const [columnVisibility, setColumnVisibility] =
     React.useState<VisibilityState>({});
@@ -123,14 +132,14 @@ export function DataTableDemo({
   const supabase = React.useMemo(
     () =>
       createClerkSupabaseClient(
-        () => session?.getToken?.() ?? Promise.resolve(null)
+        () => session?.getToken?.() ?? Promise.resolve(null),
       ),
-    [session]
+    [session],
   );
 
   React.useEffect(() => {
     let mounted = true;
-    if (!organizationId || !locationId) {
+    if (!organizationId) {
       setData([]);
       setLoading(false);
       return;
@@ -138,13 +147,32 @@ export function DataTableDemo({
 
     setLoading(true);
     const fetchData = async () => {
-      const { data: files, error } = await supabase
+      const activeLocationId = locationId || siteId || null;
+
+      let resolvedOrganizationId = organizationId;
+      if (organizationId.startsWith("org_")) {
+        const { data: orgRow } = await supabase
+          .from("clerk_organisations")
+          .select("id")
+          .eq("clerk_org_id", organizationId)
+          .maybeSingle();
+
+        if (orgRow?.id) {
+          resolvedOrganizationId = orgRow.id;
+        }
+      }
+
+      let query = supabase
         .from("company_raw_uploads")
         .select("*")
-        .eq("organization_id", organizationId)
-        .eq("company_location_id", locationId)
-        .order("uploaded_at", { ascending: false })
-        .limit(pageSize);
+        .eq("organization_id", resolvedOrganizationId)
+        .order("uploaded_at", { ascending: false });
+
+      if (activeLocationId) {
+        query = query.eq("company_location_id", activeLocationId);
+      }
+
+      const { data: files, error } = await query.limit(pageSize);
 
       if (!mounted) return;
       if (error) {
@@ -161,7 +189,7 @@ export function DataTableDemo({
     return () => {
       mounted = false;
     };
-  }, [supabase, organizationId, locationId, pageSize]);
+  }, [supabase, organizationId, locationId, siteId, pageSize]);
 
   const table = useReactTable({
     data,
@@ -238,7 +266,7 @@ export function DataTableDemo({
                       ? null
                       : flexRender(
                           header.column.columnDef.header,
-                          header.getContext()
+                          header.getContext(),
                         )}
                   </TableHead>
                 ))}
@@ -265,7 +293,7 @@ export function DataTableDemo({
                     <TableCell key={cell.id}>
                       {flexRender(
                         cell.column.columnDef.cell,
-                        cell.getContext()
+                        cell.getContext(),
                       )}
                     </TableCell>
                   ))}
