@@ -1,6 +1,6 @@
 # db/mappings.py
 
-from db.client import supabase
+from app.db.client import supabase
 from postgrest.exceptions import APIError
 
 

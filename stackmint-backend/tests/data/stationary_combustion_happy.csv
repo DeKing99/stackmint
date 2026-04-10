@@ -1,0 +1,4 @@
+date,facility_id,fuel_type,consumption,unit
+2024-01-15,FAC-001,natural_gas,1200.5,m3
+2024-02-15,FAC-001,natural_gas,980.0,m3
+2024-03-15,FAC-002,fuel_oil,300.0,liters

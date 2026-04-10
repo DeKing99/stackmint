@@ -1,14 +1,23 @@
+import asyncio
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pytz import UTC
-from app.api.routes import router
-from app.api.metrics import router as metrics_router  # adjust path if needed
-import asyncio
-from workers.polling import polling_worker
 
-from fastapi import FastAPI, Request, HTTPException, Body
-from pydantic import BaseModel, EmailStr
-from supabase import create_client
+from app.api.metrics import router as metrics_router
+from app.api.preflight import router as preflight_router
+from app.api.routes import router
+from app.workers.polling import polling_worker
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+
+# Keep Stackmint logs visible without flooding the terminal with transport noise.
+for noisy_logger in ("httpx", "httpcore", "postgrest"):
+    logging.getLogger(noisy_logger).setLevel(logging.WARNING)
 
 app = FastAPI()
 
@@ -37,5 +46,6 @@ def read_root():
 
 app.include_router(router)
 app.include_router(metrics_router)
+app.include_router(preflight_router)
 # ---------- endpoint: create a location (admin only) ----------
 

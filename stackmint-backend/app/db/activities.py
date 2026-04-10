@@ -1,12 +1,12 @@
 # db/activities.py
 
-from db.client import supabase
+from app.db.client import supabase
 from typing import List, Dict, Any
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
-from parsing.schemas import SCHEMAS
+from app.parsing.schemas import SCHEMAS
 
 
 def _serialize_row(row: Dict) -> Dict:
@@ -125,3 +125,15 @@ def insert_activities(rows: List[Dict]) -> List[Dict[str, Any]]:
             inserted_rows.append(item)
 
     return inserted_rows
+
+
+def get_activities_for_upload(upload_id: str) -> List[Dict[str, Any]]:
+    response = (
+        supabase.table("company_activities")
+        .select("*")
+        .eq("source_upload_id", upload_id)
+        .execute()
+    )
+    if not isinstance(response.data, list):
+        return []
+    return [row for row in response.data if isinstance(row, dict)]

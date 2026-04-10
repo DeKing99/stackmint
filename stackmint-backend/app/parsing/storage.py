@@ -3,7 +3,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-from db.client import supabase
+from app.db.client import supabase
 
 
 def resolve_upload_file_path(upload: Dict[str, Any]) -> Tuple[str, Optional[str]]:

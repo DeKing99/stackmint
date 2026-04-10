@@ -11,14 +11,23 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { DataTableDemo } from "@/components/file-table";
+import { DataTableDemo } from "../../../../../../components/file-table";
 import { Calendar23 } from "@/components/calendar-23";
 import { type DateRange } from "react-day-picker";
 import { v4 as uuidv4 } from "uuid";
 import { useParams } from "next/navigation";
 import { createClerkSupabaseClient } from "@/lib/supabase-client";
 import { activityTypes } from "@/lib/activity_types_schema";
+import {
+  ChevronDown,
+  SlidersHorizontal,
+  Sparkles,
+  CheckCircle,
+  XCircle,
+} from "lucide-react";
 
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -34,13 +43,20 @@ export default function FileUploader() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [activityType, setActivityType] = useState<string>("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<
+    "idle" | "success" | "error"
+  >("idle");
   const [range, setRange] = useState<DateRange | undefined>();
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: (acceptedFiles) => {
       const file = acceptedFiles[0];
       if (!file) return;
+      setActivityType("");
+      setShowAdvanced(false);
       setSelectedFile(file);
       setModalOpen(true);
     },
@@ -125,12 +141,11 @@ export default function FileUploader() {
       //public_file_url: publicUrlData?.publicUrl ?? null,
       uploaded_by: resolvedUploadedBy,
       file_type: selectedFile.type,
-      user_name: user.fullName,
       organization_id: resolvedOrganizationId,
       //file_site_id: site?.id, // this was originally selectedSite?.id ive changed to just Site
       //start_date: range?.from?.toISOString().slice(0, 10),
       //end_date: range?.to?.toISOString().slice(0, 10),
-      activity_type: activityType,
+      activity_type: activityType || null,
       upload_method: "manual",
       uploaded_at: new Date().toISOString(),
       parsing_status: "pending",
@@ -148,12 +163,13 @@ export default function FileUploader() {
 
     if (error) {
       console.error("Upload error:", error);
+      setUploadStatus("error");
       toast.error(`Upload failed: ${error.message}`);
       setIsUploading(false);
+      setTimeout(() => setUploadStatus("idle"), 3000);
     } else {
       setModalOpen(false);
       setSelectedFile(null);
-      toast.success("Succesfully uploaded to database");
       setIsUploading(false);
 
       console.log("Trying to insert metadata:", metadata);
@@ -164,11 +180,21 @@ export default function FileUploader() {
 
       if (tableError) {
         console.error("Insert error message:", tableError);
+        setUploadStatus("error");
         toast.error(`Insert failed: ${tableError.message}`);
+        setTimeout(() => setUploadStatus("idle"), 3000);
       } else {
         console.log(tableData);
-        row_id = tableData[0]?.id;
+        const row_id = tableData[0]?.id;
         console.log("Insert successful, row ID:", row_id);
+        setUploadStatus("success");
+        setRefreshTrigger((prev) => prev + 1);
+        setTimeout(() => setUploadStatus("idle"), 3000);
+        toast.success(
+          activityType
+            ? "Upload queued with a manual activity type."
+            : "Upload queued. Activity type will be inferred automatically.",
+        );
       }
     }
   };
@@ -205,39 +231,95 @@ export default function FileUploader() {
   return (
     <>
       {modalOpen && selectedFile && (
-        <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-          <DialogContent>
+        <Dialog
+          open={modalOpen}
+          onOpenChange={(open) => {
+            setModalOpen(open);
+            if (!open) {
+              setShowAdvanced(false);
+              setActivityType("");
+            }
+          }}
+        >
+          <DialogContent className="sm:max-w-lg">
             <DialogHeader>
-              <DialogTitle>Select Activity type</DialogTitle>
+              <DialogTitle>Activity Type Detection</DialogTitle>
               <DialogDescription>
-                Current file: <strong>{selectedFile.name}</strong>
+                Current file: <strong>{selectedFile.name}</strong>. Leave the
+                upload in auto mode and the backend will classify it for you.
               </DialogDescription>
             </DialogHeader>
 
-            {/* select activity type */}
-            <label className="block mt-4">
-              <span className="text-gray-700">Activity type</span>
-              <select
-                value={activityType}
-                onChange={(e) => setActivityType(e.target.value)}
-                className="w-full border rounded p-2 mt-1"
+            <Card className="gap-3 border-sky-200/80 bg-gradient-to-br from-sky-50 via-white to-cyan-50 py-4 shadow-none">
+              <CardHeader className="pb-0">
+                <CardTitle className="flex items-center gap-2 text-base text-slate-900">
+                  <Sparkles className="size-4 text-sky-600" />
+                  Automatic classification
+                  <Badge
+                    variant="secondary"
+                    className="ml-2 bg-white text-sky-900"
+                  >
+                    Enterprise mode
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm text-slate-600">
+                <p>
+                  We will infer the activity type from file structure, common
+                  enterprise headers, and schema-aware matching.
+                </p>
+                <p>
+                  High-confidence uploads continue automatically. Low-confidence
+                  uploads are sent to the review queue so nothing gets silently
+                  misclassified.
+                </p>
+              </CardContent>
+            </Card>
+
+            <div className="mt-4 space-y-3">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full justify-between"
+                onClick={() => setShowAdvanced((current) => !current)}
               >
-                <option value="" disabled>
-                  -- choose an activity --
-                </option>
-                {activityTypes.map((a) => (
-                  <option key={a.value} value={a.value}>
-                    {a.label}
-                  </option>
-                ))}
-              </select>
-              <p className="text-sm text-gray-500 mt-1">
-                {
-                  activityTypes.find((a) => a.value === activityType)
-                    ?.description
-                }
-              </p>
-            </label>
+                <span className="inline-flex items-center gap-2">
+                  <SlidersHorizontal className="size-4" />
+                  Advanced controls
+                </span>
+                <ChevronDown
+                  className={`size-4 transition-transform ${showAdvanced ? "rotate-180" : ""}`}
+                />
+              </Button>
+
+              {showAdvanced ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-900">
+                      Manual activity type override
+                    </span>
+                    <select
+                      value={activityType}
+                      onChange={(e) => setActivityType(e.target.value)}
+                      className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm shadow-sm outline-none transition focus:border-sky-400"
+                    >
+                      <option value="">Auto-detect from file</option>
+                      {activityTypes.map((a) => (
+                        <option key={a.value} value={a.value}>
+                          {a.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-2 text-sm text-slate-500">
+                      {activityType
+                        ? activityTypes.find((a) => a.value === activityType)
+                            ?.description
+                        : "Leave this blank unless you need to force a specific classification before parsing starts."}
+                    </p>
+                  </label>
+                </div>
+              ) : null}
+            </div>
 
             {/* <Calendar23 range={range} setRange={setRange} /> */}
 
@@ -279,14 +361,33 @@ export default function FileUploader() {
       <section>
         <div className="container mx-auto py-8">
           <div className="mb-8">
-            <h1 className="text-3xl font-bold">File Management</h1>
-            <p className="text-muted-foreground">
-              Manage and view your uploaded files
-              {/* Only admins can select and delete files */}
-            </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-3xl font-bold">File Management</h1>
+                <p className="text-muted-foreground">
+                  Manage and view your uploaded files
+                  {/* Only admins can select and delete files */}
+                </p>
+              </div>
+              {uploadStatus === "success" && (
+                <div className="flex items-center gap-2 rounded-lg bg-green-50 px-4 py-2 text-green-700">
+                  <CheckCircle className="size-5" />
+                  <span className="text-sm font-medium">
+                    Upload successful!
+                  </span>
+                </div>
+              )}
+              {uploadStatus === "error" && (
+                <div className="flex items-center gap-2 rounded-lg bg-red-50 px-4 py-2 text-red-700">
+                  <XCircle className="size-5" />
+                  <span className="text-sm font-medium">Upload failed</span>
+                </div>
+              )}
+            </div>
           </div>
           {/* Replace "your_table_name" with your actual Supabase table name */}
           <DataTableDemo
+            key={refreshTrigger}
             organizationId={organization?.id!}
             locationId={locationId}
           />

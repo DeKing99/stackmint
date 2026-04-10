@@ -12,10 +12,12 @@ httpx==0.28.1
 hyperframe==6.1.0
 idna==3.10
 packaging==25.0
+openai==2.29.0
 postgrest==1.1.1
 pydantic==2.11.7
 pydantic_core==2.33.2
 PyJWT==2.10.1
+pytz==2026.1.post1
 python-dateutil==2.9.0.post0
 realtime==2.7.0
 six==1.17.0

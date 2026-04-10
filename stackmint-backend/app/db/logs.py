@@ -1,6 +1,6 @@
 # db/logs.py
 
-from db.client import supabase
+from app.db.client import supabase
 from datetime import datetime
 from postgrest.exceptions import APIError
 

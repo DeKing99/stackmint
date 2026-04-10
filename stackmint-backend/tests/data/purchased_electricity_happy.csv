@@ -1,0 +1,4 @@
+date,facility_id,consumption,unit,region
+2024-01-15,FAC-001,45000.0,kwh,UK
+2024-02-15,FAC-001,42000.0,kwh,UK
+2024-03-15,FAC-002,12000.0,mwh,US

@@ -1,0 +1,4 @@
+date,waste_type,amount,unit
+2024-01-31,general_waste,800.0,kg
+2024-01-31,recycling,250.0,kg
+2024-02-28,hazardous,15.0,kg

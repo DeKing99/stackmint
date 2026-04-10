@@ -1,0 +1,4 @@
+date,travel_mode,distance,unit
+2024-01-10,flight,1500.0,km
+2024-01-20,train,200.0,km
+2024-02-05,car,80.0,km

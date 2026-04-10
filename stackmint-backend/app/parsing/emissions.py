@@ -1,9 +1,14 @@
-from typing import Any, Dict, Mapping, Optional, List
+from typing import Any, Dict, Mapping, Optional, List, Sequence
 from decimal import Decimal, InvalidOperation
-from datetime import datetime
+from datetime import datetime, timezone
+import logging
+import re
 
 from supabase import Client
-from parsing.schemas import SCHEMAS
+from app.parsing.schemas import SCHEMAS
+
+
+logger = logging.getLogger(__name__)
 
 
 class EmissionsCalculationError(Exception):
@@ -62,13 +67,113 @@ def _resolve_activity_value(row: Mapping[str, Any], activity_type: str) -> Optio
     return None
 
 
+def _normalize_token(value: Optional[str]) -> str:
+    if not isinstance(value, str):
+        return ""
+    return re.sub(r"[^a-z0-9]", "", value.lower())
+
+
+def _token_variants(value: Optional[str]) -> set[str]:
+    """
+    Build comparable token variants for strings that may include protocol prefixes,
+    e.g. R134a <-> HFC-134a.
+    """
+    base = _normalize_token(value)
+    if not base:
+        return set()
+
+    variants = {base}
+    for prefix in ("hfc", "hcfc", "cfc", "r"):
+        if base.startswith(prefix) and len(base) > len(prefix):
+            variants.add(base[len(prefix):])
+    return variants
+
+
+def _search_tokens(value: Optional[str]) -> List[str]:
+    """
+    Build text search tokens for PostgREST ilike queries.
+    """
+    if not isinstance(value, str):
+        return []
+
+    raw = value.strip()
+    out: List[str] = []
+    if raw:
+        out.append(raw)
+
+    for variant in sorted(_token_variants(value), key=len, reverse=True):
+        if variant and variant not in out:
+            out.append(variant)
+    return out[:4]
+
+
+def _extract_factor_decimal(factor_row: Mapping[str, Any]) -> Optional[Decimal]:
+    """
+    Resolve the numeric factor from common factor columns.
+    Prefer factor_value, then fall back to co2/ch4/n2o if present.
+    """
+    for key in ("factor_value", "co2", "ch4", "n2o"):
+        value = factor_row.get(key)
+        if value is None:
+            continue
+        try:
+            return Decimal(str(value))
+        except (InvalidOperation, TypeError):
+            continue
+    return None
+
+
+def _select_best_factor_row(
+    rows: Sequence[Mapping[str, Any]],
+    match_token: Optional[str],
+) -> Optional[Mapping[str, Any]]:
+    """
+    Choose the best factor row by:
+    1) requiring a parseable numeric factor
+    2) preferring detail/name that matches gas_type/fuel_type token when provided
+    """
+    if not rows:
+        return None
+
+    token_variants = _token_variants(match_token)
+    numeric_rows: List[Mapping[str, Any]] = [r for r in rows if _extract_factor_decimal(r) is not None]
+    if not numeric_rows:
+        return None
+
+    if not token_variants:
+        return numeric_rows[0]
+
+    for row in numeric_rows:
+        detail_variants = _token_variants(row.get("detail") if isinstance(row.get("detail"), str) else None)
+        name_variants = _token_variants(row.get("name") if isinstance(row.get("name"), str) else None)
+        category_variants = _token_variants(row.get("category") if isinstance(row.get("category"), str) else None)
+
+        # Direct/alias match catches common pairs like R134a -> HFC-134a.
+        for tv in token_variants:
+            if any(tv == dv or tv in dv for dv in detail_variants):
+                return row
+            if any(tv == nv or tv in nv for nv in name_variants):
+                return row
+            if any(tv == cv or tv in cv for cv in category_variants):
+                return row
+
+    return numeric_rows[0]
+
+
 def _fetch_emission_factor(
     supabase: Client,
     activity_type: str,
     unit: Optional[str],
     region: Optional[str],
     year: Optional[int],
-) -> Optional[Mapping[str, Any]]:
+    match_token: Optional[str] = None,
+) -> tuple[Optional[Mapping[str, Any]], List[str]]:
+    """
+    Returns (factor_row | None, list_of_attempts_tried).
+    Each attempt string describes the exact filter tuple so callers can log why
+    a match was not found.
+    """
+    attempts_tried: List[str] = []
     attempts: List[tuple[bool, bool, bool]] = []
 
     if unit:
@@ -89,34 +194,69 @@ def _fetch_emission_factor(
     attempts.append((False, False, False))
 
     for use_region, use_year, use_unit in attempts:
-        query = (
-            supabase.table("emission_factors")
-            .select("*")
-            .eq("activity_type", activity_type)
+        filter_unit = unit if use_unit else None
+        filter_region = region if use_region else None
+        filter_year = year if use_year else None
+
+        attempt_desc = (
+            f"activity_type={activity_type}"
+            + (f" unit={filter_unit}" if filter_unit else "")
+            + (f" region={filter_region}" if filter_region else "")
+            + (f" year={filter_year}" if filter_year is not None else "")
         )
+        attempts_tried.append(attempt_desc)
 
-        if use_unit and unit:
-            query = query.eq("unit", unit)
+        def _build_base_query():
+            base_query = (
+                supabase.table("emission_factors")
+                .select("*")
+                .eq("activity_type", activity_type)
+            )
 
-        if use_region and region:
-            query = query.eq("region", region)
+            if use_unit and unit:
+                base_query = base_query.eq("unit", unit)
 
-        if use_year and year is not None:
-            query = query.eq("year", year)
+            if use_region and region:
+                base_query = base_query.eq("region", region)
 
-        response = query.limit(1).execute()
+            if use_year and year is not None:
+                base_query = base_query.eq("year", year)
+
+            return base_query
+
+        # 1) Targeted match (detail/name) when a token like gas_type is available.
+        if match_token:
+            for token in _search_tokens(match_token):
+                detail_response = _build_base_query().ilike("detail", f"%{token}%").limit(100).execute()
+                if detail_response.data:
+                    candidate_rows = [r for r in detail_response.data if isinstance(r, Mapping)]
+                    selected = _select_best_factor_row(candidate_rows, match_token)
+                    if selected is not None:
+                        return selected, attempts_tried
+
+                name_response = _build_base_query().ilike("name", f"%{token}%").limit(100).execute()
+                if name_response.data:
+                    candidate_rows = [r for r in name_response.data if isinstance(r, Mapping)]
+                    selected = _select_best_factor_row(candidate_rows, match_token)
+                    if selected is not None:
+                        return selected, attempts_tried
+
+        # 2) Broad fallback when no targeted match found.
+        response = _build_base_query().limit(200).execute()
         if response.data:
-            row = response.data[0]
-            if isinstance(row, Mapping):
-                return row
+            candidate_rows = [r for r in response.data if isinstance(r, Mapping)]
+            selected = _select_best_factor_row(candidate_rows, match_token)
+            if selected is not None:
+                return selected, attempts_tried
 
-    return None
+    return None, attempts_tried
 
 
 def calculate_emissions_for_row(
     supabase: Client,
     row: Dict[str, Any],
     activity_id: str,
+    inserted_activity: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Synchronous, enterprise-safe emissions calculation.
@@ -129,30 +269,42 @@ def calculate_emissions_for_row(
     activity_type = _safe_get_str(row, "activity_type")
     unit = _safe_get_str(row, "unit")
     value = _resolve_activity_value(row, activity_type or "")
-    region = _safe_get_str(row, "region")
+    region = _safe_get_str(row, "region") or (
+        _safe_get_str(inserted_activity, "region") if isinstance(inserted_activity, Mapping) else None
+    )
     year = _safe_get_int(row, "year")
+    match_token = (
+        _safe_get_str(row, "gas_type")
+        or _safe_get_str(row, "fuel_type")
+        or _safe_get_str(row, "waste_type")
+        or _safe_get_str(row, "travel_mode")
+        or _safe_get_str(row, "transport_mode")
+        or _safe_get_str(row, "commute_mode")
+        or _safe_get_str(row, "category")
+    )
 
     if not activity_type or value is None:
-        raise EmissionsCalculationError("Missing required emissions fields")
+        raise EmissionsCalculationError(
+            f"Missing required emissions fields: activity_type={activity_type!r} value={value!r}"
+        )
 
-    factor_row = _fetch_emission_factor(
+    factor_row, attempts_tried = _fetch_emission_factor(
         supabase=supabase,
         activity_type=activity_type,
         unit=unit,
         region=region,
         year=year,
+        match_token=match_token,
     )
 
     if not factor_row:
+        attempts_str = "; ".join(attempts_tried) if attempts_tried else "none"
         raise EmissionsCalculationError(
-            f"No emission factor found for activity_type={activity_type}"
+            f"No emission factor found. Lookup attempts tried: [{attempts_str}]"
         )
 
-    factor_raw = factor_row.get("factor_value")
-
-    try:
-        factor = Decimal(str(factor_raw))
-    except (InvalidOperation, TypeError):
+    factor = _extract_factor_decimal(factor_row)
+    if factor is None:
         raise EmissionsCalculationError("Invalid factor_value")
 
     emissions_value = value * factor
@@ -161,7 +313,7 @@ def calculate_emissions_for_row(
         "activity_id": activity_id,
         "emission_factor_id": factor_row.get("id"),
         "co2e": float(emissions_value),
-        "calculated_at": datetime.utcnow().isoformat(),
+        "calculated_at": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -169,29 +321,88 @@ def calculate_emissions_for_batch(
     supabase: Client,
     rows: List[Dict[str, Any]],
     inserted_activities: List[Dict[str, Any]],
-) -> List[Dict[str, Any]]:
+) -> Dict[str, Any]:
     """
     Batch-safe emissions calculation.
     Fully Pylance clean.
     """
 
     emissions_rows: List[Dict[str, Any]] = []
+    skipped_rows: List[Dict[str, Any]] = []
+    skip_reason_counts: Dict[str, int] = {}
 
     for index, row in enumerate(rows):
         try:
             activity = inserted_activities[index] if index < len(inserted_activities) else None
             activity_id = activity.get("id") if isinstance(activity, Mapping) else None
             if not isinstance(activity_id, str) or not activity_id:
+                reason = "no_activity_id"
+                skip_reason_counts[reason] = skip_reason_counts.get(reason, 0) + 1
+                skipped_rows.append({
+                    "row_index": index,
+                    "reason": reason,
+                    "status": "skipped",
+                })
                 continue
 
             result = calculate_emissions_for_row(
                 supabase=supabase,
                 row=row,
                 activity_id=activity_id,
+                inserted_activity=activity if isinstance(activity, Mapping) else None,
             )
             emissions_rows.append(result)
-        except EmissionsCalculationError:
-            # In production you might log this
+        except EmissionsCalculationError as e:
+            reason_str = str(e)
+            # Bucket skip reasons for aggregated diagnostics.
+            if "No emission factor found" in reason_str:
+                bucket = "no_factor_match"
+            elif "Missing required" in reason_str:
+                bucket = "missing_fields"
+            elif "Invalid factor_value" in reason_str:
+                bucket = "invalid_factor"
+            else:
+                bucket = "calculation_error"
+            skip_reason_counts[bucket] = skip_reason_counts.get(bucket, 0) + 1
+
+            skipped_rows.append({
+                "row_index": index,
+                "reason": reason_str,
+                "bucket": bucket,
+                "status": "skipped",
+                "activity_type": row.get("activity_type"),
+                "unit": row.get("unit"),
+                "region": row.get("region"),
+                "year": row.get("year"),
+            })
+            logger.warning("[Emissions] Row %s skipped (%s): %s", index, bucket, reason_str)
+            continue
+        except Exception as e:
+            skip_reason_counts["unexpected_error"] = skip_reason_counts.get("unexpected_error", 0) + 1
+            skipped_rows.append({
+                "row_index": index,
+                "reason": f"unexpected emissions error: {str(e)}",
+                "bucket": "unexpected_error",
+                "status": "skipped",
+            })
+            logger.exception("[Emissions] Row %s unexpected error", index)
             continue
 
-    return emissions_rows
+    if skipped_rows:
+        logger.warning(
+            "[Emissions] Batch complete: %s calculated, %s skipped. Skip buckets: %s",
+            len(emissions_rows),
+            len(skipped_rows),
+            skip_reason_counts,
+        )
+
+    return {
+        "rows": emissions_rows,
+        "skipped_rows": skipped_rows,
+        "summary": {
+            "calculated_count": len(emissions_rows),
+            "skipped_count": len(skipped_rows),
+            "total_count": len(rows),
+            "skip_reasons": skip_reason_counts,
+        },
+    }

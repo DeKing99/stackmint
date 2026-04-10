@@ -1,0 +1,4 @@
+date,commute_mode,distance,unit
+2024-01-15,car,25.0,km
+2024-01-15,public_transport,12.0,km
+2024-01-16,cycling,5.0,km

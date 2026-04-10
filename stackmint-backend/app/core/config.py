@@ -1,16 +1,25 @@
-# app/core/config.py
-from sre_constants import CATEGORY_LINEBREAK
-from pydantic_settings import BaseSettings
+from pydantic import AliasChoices, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Load settings from .env
 class Settings(BaseSettings):
     SUPABASE_URL: str
-    SUPABASE_SECRET_KEY: str
-    OPENAI_KEY: str
+    SUPABASE_SECRET_KEY: str = Field(
+        validation_alias=AliasChoices(
+            "SUPABASE_SECRET_KEY",
+            "SUPABASE_SERVICE_ROLE_KEY",
+            "supabase_secret_key",
+            "supabase_service_role_key",
+        )
+    )
+    OPENAI_KEY: str = Field(
+        validation_alias=AliasChoices(
+            "OPENAI_KEY",
+            "OPENAI_API_KEY",
+            "openai_key",
+            "openai_api_key",
+        )
+    )
     CLERK_SECRET_KEY: str
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    class Config:
-        env_file = ".env"
-
-# Initialize settings
-settings = Settings() # type: ignore
+settings = Settings()  # pyright: ignore[reportCallIssue]

@@ -2,7 +2,7 @@
 
 from typing import Dict, Any, Tuple
 import re
-from parsing.schemas import SCHEMAS
+from app.parsing.schemas import SCHEMAS
 
 
 # -----------------------------
@@ -81,12 +81,12 @@ COLUMN_ALIASES: Dict[str, Dict[str, list]] = {
     # WASTE GENERATED
     # -------------------------------------------------
     "waste_generated": {
-        "date": ["date"],
-        "facility_id": ["facility", "site"],
-        "waste_type": ["waste", "waste_category"],
-        "disposal_method": ["method", "treatment_method"],
-        "quantity": ["weight", "tonnes", "kg", "quantity"],
-        "unit": ["unit"],
+        "date": ["date", "activity_date", "collection_date", "disposal_date"],
+        "facility_id": ["facility", "site", "location", "plant", "facility_id"],
+        "waste_type": ["waste", "waste_category", "category", "waste_stream", "material_type", "type"],
+        "disposal_method": ["method", "treatment_method", "disposal_method", "route"],
+        "quantity": ["weight", "tonnes", "kg", "quantity", "amount", "mass", "volume"],
+        "unit": ["unit", "uom", "unit_of_measure", "measure"],
     },
 
     # -------------------------------------------------
@@ -142,11 +142,19 @@ COLUMN_ALIASES: Dict[str, Dict[str, list]] = {
     # REFRIGERANT LEAKAGE
     # -------------------------------------------------
     "refrigerant_leakage": {
-        "date": ["date"],
-        "facility_id": ["facility"],
-        "refrigerant_type": ["refrigerant", "gas_type"],
-        "quantity": ["kg", "quantity"],
-        "unit": ["unit"],
+        "date": ["date", "activity_date", "incident_date", "leak_date"],
+        "facility_id": ["facility", "site", "location", "facility_id"],
+        "refrigerant_type": [
+            "refrigerant",
+            "gas_type",
+            "gas",
+            "refrigerant_type",
+            "refrigerant_name",
+            "ghg_gas",
+            "fugitive_gas",
+        ],
+        "quantity": ["kg", "quantity", "amount_released", "leakage", "released_kg"],
+        "unit": ["unit", "uom", "unit_of_measure"],
     },
 
     # -------------------------------------------------

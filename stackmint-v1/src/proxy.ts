@@ -25,6 +25,40 @@ const supabase = createClient(
 );
 
 // ============================================
+// Location validation cache
+// Avoids a DB roundtrip on every location-scoped navigation.
+// Only valid (positive) results are cached so that revoking access
+// takes effect within LOCATION_CACHE_TTL_MS at most.
+// ============================================
+
+const _locationCache = new Map<string, number>(); // key → expiry timestamp
+const LOCATION_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+async function isLocationValidForOrg(
+  locationId: string,
+  orgId: string,
+): Promise<boolean> {
+  const key = `${orgId}:${locationId}`;
+  const expiry = _locationCache.get(key);
+  if (expiry !== undefined && expiry > Date.now()) {
+    return true; // cache hit — skip DB
+  }
+
+  const { data, error } = await supabase
+    .from("company_locations")
+    .select("id")
+    .eq("id", locationId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+
+  if (!error && data) {
+    _locationCache.set(key, Date.now() + LOCATION_CACHE_TTL_MS);
+    return true;
+  }
+  return false; // never cache negative results
+}
+
+// ============================================
 // Helper Functions
 // ============================================
 
@@ -118,20 +152,28 @@ export default clerkMiddleware(async (auth, req) => {
       return Response.redirect(url);
     }
 
-    // 5a-bis. Guardrail: path org slug must match authoritative org slug from DB.
+    // 5a-bis. Guardrail: path org slug must match active org.
+    // Clerk's orgSlug (from the signed JWT) is authoritative — no DB roundtrip needed.
+    // Step 4b already redirects mismatches when orgSlug is non-null, so if we reach
+    // here with orgSlug set, the slugs already match. Only fall back to DB when
+    // orgSlug is absent from the token (rare edge case).
     const pathOrgSegment = extractOrgPathSegment(pathname);
     if (pathOrgSegment) {
-      const { data: orgRow, error: orgError } = await supabase
-        .from("clerk_organisations")
-        .select("slug")
-        .eq("clerk_org_id", orgId)
-        .maybeSingle();
+      if (!orgSlug) {
+        // orgSlug missing from JWT — verify against DB as fallback
+        const { data: orgRow, error: orgError } = await supabase
+          .from("clerk_organisations")
+          .select("slug")
+          .eq("clerk_org_id", orgId)
+          .maybeSingle();
 
-      if (orgError || !orgRow || orgRow.slug !== pathOrgSegment) {
-        const url = req.nextUrl.clone();
-        url.pathname = "/no-access";
-        return Response.redirect(url);
+        if (orgError || !orgRow || orgRow.slug !== pathOrgSegment) {
+          const url = req.nextUrl.clone();
+          url.pathname = "/no-access";
+          return Response.redirect(url);
+        }
       }
+      // When orgSlug is present, step 4b already enforced the match — skip DB.
     }
 
     // 5b. Check if this is an org-level route (not a location route)
@@ -163,15 +205,9 @@ export default clerkMiddleware(async (auth, req) => {
         return Response.redirect(url);
       }
 
-      // Ensure location exists and belongs to the active org.
-      const { data: locationRow, error: locationError } = await supabase
-        .from("company_locations")
-        .select("id")
-        .eq("id", locationId)
-        .eq("organization_id", orgId)
-        .maybeSingle();
-
-      if (locationError || !locationRow) {
+      // Ensure location exists and belongs to the active org (cached).
+      const locationValid = await isLocationValidForOrg(locationId, orgId);
+      if (!locationValid) {
         const url = req.nextUrl.clone();
         url.pathname = "/no-access";
         return Response.redirect(url);
