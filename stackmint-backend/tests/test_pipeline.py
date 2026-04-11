@@ -24,6 +24,18 @@ import pytest
 
 DATA_DIR = pathlib.Path(__file__).parent / "data"
 
+
+@pytest.fixture(autouse=True)
+def _reset_emissions_cache_between_tests():
+    try:
+        from app.parsing.emissions import clear_emission_factor_cache
+
+        clear_emission_factor_cache()
+    except Exception:
+        # Some test modules don't import emissions; keep fixture no-op there.
+        pass
+    yield
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -333,6 +345,27 @@ class TestEmissionsCalculation:
         row = {"activity_type": "purchased_electricity", "unit": "kwh"}
         with pytest.raises(EmissionsCalculationError):
             calculate_emissions_for_row(mock_sb, row, "act-001")
+
+    def test_lookup_result_is_cached_for_identical_key(self):
+        from app.parsing.emissions import calculate_emissions_for_row
+
+        mock_sb = _mock_supabase_with_factor(0.233)
+        row = {
+            "activity_type": "purchased_electricity",
+            "consumption": 1000.0,
+            "unit": "kwh",
+            "region": "CACHE_REGION_001",
+            "year": 2099,
+        }
+
+        result_1 = calculate_emissions_for_row(mock_sb, row, "act-cache-1")
+        result_2 = calculate_emissions_for_row(mock_sb, row, "act-cache-2")
+
+        assert abs(result_1["co2e"] - 233.0) < 0.01
+        assert abs(result_2["co2e"] - 233.0) < 0.01
+
+        mock_query = mock_sb.table.return_value
+        assert mock_query.execute.call_count == 1
 
 
 class TestEmissionsBatch:

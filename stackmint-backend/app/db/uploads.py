@@ -4,21 +4,81 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
 import re
 import logging
+import threading
 from app.db.client import supabase
 from postgrest.exceptions import APIError
 
 
 logger = logging.getLogger(__name__)
 
+_status_column_cache: str | None = None
+_status_column_lock = threading.Lock()
+
 
 def _detect_status_column() -> str:
-    for column in ("parsing_status", "status"):
-        try:
-            supabase.table("company_raw_uploads").select("id").eq(column, "pending").limit(1).execute()
-            return column
-        except APIError:
-            continue
+    global _status_column_cache
+
+    if _status_column_cache:
+        return _status_column_cache
+
+    with _status_column_lock:
+        if _status_column_cache:
+            return _status_column_cache
+
+        for column in ("parsing_status", "status"):
+            try:
+                supabase.table("company_raw_uploads").select("id").eq(column, "pending").limit(1).execute()
+                _status_column_cache = column
+                return column
+            except APIError:
+                continue
+
     raise RuntimeError("No supported upload status column found")
+
+
+def _claim_upload(upload: Dict[str, Any], status_column: str, expected_status: str) -> bool:
+    upload_id = upload.get("id")
+    if not upload_id:
+        return False
+
+    query = (
+        supabase.table("company_raw_uploads")
+        .update({status_column: "processing"}, count="exact", returning="minimal")
+        .eq("id", upload_id)
+        .eq(status_column, expected_status)
+    )
+
+    # If updated_at is present, include it as a compare-and-swap guard.
+    # This makes stale reclaims safer under concurrent workers.
+    previous_updated_at = upload.get("updated_at")
+    if isinstance(previous_updated_at, str) and previous_updated_at.strip():
+        query = query.eq("updated_at", previous_updated_at)
+
+    response = query.execute()
+    if response.count is not None:
+        return response.count > 0
+    return bool(getattr(response, "data", None))
+
+
+def _claim_pending_upload(status_column: str) -> Optional[Dict[str, Any]]:
+    response = (
+        supabase.table("company_raw_uploads")
+        .select("*")
+        .eq(status_column, "pending")
+        .limit(25)
+        .execute()
+    )
+
+    if not response.data:
+        return None
+
+    for item in response.data:
+        if not isinstance(item, dict):
+            continue
+        if _claim_upload(item, status_column, "pending"):
+            return item
+
+    return None
 
 
 def _update_upload_status(upload_id: str, new_status: str, error: str | None = None) -> None:
@@ -37,22 +97,19 @@ def _update_upload_status(upload_id: str, new_status: str, error: str | None = N
 
 def get_pending_upload() -> Optional[Dict[str, Any]]:
     """
-    Fetch one upload with status='pending'
+    Claim one upload and transition it to processing.
     """
     status_column = _detect_status_column()
-    response = (
-        supabase.table("company_raw_uploads")
-        .select("*")
-        .eq(status_column, "pending")
-        .limit(1)
-        .execute()
-    )
-    if response.data:
-        return response.data[0]  # type: ignore[index]
+    claimed_pending = _claim_pending_upload(status_column)
+    if claimed_pending:
+        return claimed_pending
 
     # Recovery path: reclaim stale processing uploads that likely got stuck.
     stale = _get_stale_processing_upload(status_column)
-    return stale
+    if stale and _claim_upload(stale, status_column, "processing"):
+        return stale
+
+    return None
 
 
 def _parse_iso(value: Any) -> Optional[datetime]:

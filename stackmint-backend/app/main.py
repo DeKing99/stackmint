@@ -7,7 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.metrics import router as metrics_router
 from app.api.preflight import router as preflight_router
 from app.api.routes import router
-from app.workers.polling import polling_worker
+from app.workers.polling import start_worker_pool
+from app.core.config import settings
 
 
 logging.basicConfig(
@@ -37,7 +38,12 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_event():
-    asyncio.create_task(polling_worker())
+    asyncio.create_task(
+        start_worker_pool(
+            concurrency=settings.INGEST_WORKER_CONCURRENCY,
+            interval_seconds=settings.INGEST_POLL_INTERVAL_SECONDS,
+        )
+    )
 
 
 @app.get("/")

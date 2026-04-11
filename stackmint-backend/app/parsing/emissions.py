@@ -3,9 +3,13 @@ from decimal import Decimal, InvalidOperation
 from datetime import datetime, timezone
 import logging
 import re
+import time
+import threading
+from collections import OrderedDict
 
 from supabase import Client
 from app.parsing.schemas import SCHEMAS
+from app.core.config import settings
 
 
 logger = logging.getLogger(__name__)
@@ -13,6 +17,66 @@ logger = logging.getLogger(__name__)
 
 class EmissionsCalculationError(Exception):
     pass
+
+
+class _TTLFactorCache:
+    def __init__(self, maxsize: int, ttl_seconds: int):
+        self.maxsize = max(1, int(maxsize))
+        self.ttl_seconds = max(1, int(ttl_seconds))
+        self._store: OrderedDict[
+            tuple[str, str, str, int, str],
+            tuple[float, tuple[Optional[Dict[str, Any]], tuple[str, ...]]],
+        ] = OrderedDict()
+        self._lock = threading.Lock()
+
+    def get(self, key: tuple[str, str, str, int, str]) -> Optional[tuple[Optional[Dict[str, Any]], List[str]]]:
+        now = time.time()
+        with self._lock:
+            payload = self._store.get(key)
+            if payload is None:
+                return None
+
+            expires_at, value = payload
+            if expires_at < now:
+                self._store.pop(key, None)
+                return None
+
+            self._store.move_to_end(key)
+            factor_row, attempts = value
+            return (dict(factor_row) if isinstance(factor_row, dict) else None, list(attempts))
+
+    def set(
+        self,
+        key: tuple[str, str, str, int, str],
+        factor_row: Optional[Mapping[str, Any]],
+        attempts_tried: List[str],
+    ) -> None:
+        now = time.time()
+        normalized_factor = dict(factor_row) if isinstance(factor_row, Mapping) else None
+        normalized_attempts = tuple(attempts_tried)
+
+        with self._lock:
+            self._store[key] = (
+                now + self.ttl_seconds,
+                (normalized_factor, normalized_attempts),
+            )
+            self._store.move_to_end(key)
+            while len(self._store) > self.maxsize:
+                self._store.popitem(last=False)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._store.clear()
+
+
+_factor_cache = _TTLFactorCache(
+    maxsize=settings.EMISSION_FACTOR_CACHE_SIZE,
+    ttl_seconds=settings.EMISSION_FACTOR_CACHE_TTL_SECONDS,
+)
+
+
+def clear_emission_factor_cache() -> None:
+    _factor_cache.clear()
 
 
 def _safe_get_str(data: Mapping[str, Any], key: str) -> Optional[str]:
@@ -173,6 +237,17 @@ def _fetch_emission_factor(
     Each attempt string describes the exact filter tuple so callers can log why
     a match was not found.
     """
+    cache_key = (
+        activity_type,
+        unit or "",
+        region or "",
+        year if year is not None else -1,
+        _normalize_token(match_token),
+    )
+    cached = _factor_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     attempts_tried: List[str] = []
     attempts: List[tuple[bool, bool, bool]] = []
 
@@ -232,6 +307,7 @@ def _fetch_emission_factor(
                     candidate_rows = [r for r in detail_response.data if isinstance(r, Mapping)]
                     selected = _select_best_factor_row(candidate_rows, match_token)
                     if selected is not None:
+                        _factor_cache.set(cache_key, selected, attempts_tried)
                         return selected, attempts_tried
 
                 name_response = _build_base_query().ilike("name", f"%{token}%").limit(100).execute()
@@ -239,6 +315,7 @@ def _fetch_emission_factor(
                     candidate_rows = [r for r in name_response.data if isinstance(r, Mapping)]
                     selected = _select_best_factor_row(candidate_rows, match_token)
                     if selected is not None:
+                        _factor_cache.set(cache_key, selected, attempts_tried)
                         return selected, attempts_tried
 
         # 2) Broad fallback when no targeted match found.
@@ -247,8 +324,10 @@ def _fetch_emission_factor(
             candidate_rows = [r for r in response.data if isinstance(r, Mapping)]
             selected = _select_best_factor_row(candidate_rows, match_token)
             if selected is not None:
+                _factor_cache.set(cache_key, selected, attempts_tried)
                 return selected, attempts_tried
 
+    _factor_cache.set(cache_key, None, attempts_tried)
     return None, attempts_tried
 
 
