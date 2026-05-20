@@ -271,9 +271,17 @@ export default function SitesPage() {
                   }}
                   disabled={isCreatingLocation}
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  Start typing to search for an address
-                </p>
+                {locationLat !== null && locationLng !== null ? (
+                  <p className="text-xs text-green-600 mt-1">
+                    ✓ Coordinates captured ({locationLat.toFixed(4)},{" "}
+                    {locationLng.toFixed(4)})
+                  </p>
+                ) : (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Start typing to search for an address and select one to
+                    capture its coordinates
+                  </p>
+                )}
               </div>
             </div>
 

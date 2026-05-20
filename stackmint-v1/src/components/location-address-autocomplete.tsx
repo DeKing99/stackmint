@@ -65,7 +65,8 @@ export function LocationAddressAutocomplete({
       const data: NominatimResult[] = await response.json();
       setSuggestions(data);
       setIsOpen(data.length > 0);
-    } catch {
+    } catch (err) {
+      console.error("Nominatim geocoding request failed:", err);
       setSuggestions([]);
     } finally {
       setIsLoading(false);
