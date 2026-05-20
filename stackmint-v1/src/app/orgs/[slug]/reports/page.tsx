@@ -1,6 +1,6 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -9,49 +9,50 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { createClient } from "@supabase/supabase-js";
 import { useSession, useOrganization } from "@clerk/nextjs";
-import { MapPinned, ChevronRight } from "lucide-react"
-import { useRouter, useParams } from "next/navigation";
-//import { useSession } from "@clerk/clerk-react"; // Ensure you have Clerk set up for authentication
-//import { supabase } from "@/lib/supabaseClient"; // Adjust path based on your setup
+import { MapPinned, ChevronRight } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { createClerkSupabaseClient } from "@/lib/supabase-client";
 
 type Report = {
   id: string; // Assuming you have an ID field
   report_name: string;
   report_slug: string;
   report_location: string;
-}
+};
+
+type Location = {
+  id: string;
+  location_name: string;
+};
 
 export default function SitesPage() {
-
-  const { locationSlug } = useParams<{ locationSlug: string }>();
   const [modalOpen, setModalOpen] = useState(false);
   const [reportName, setReportName] = useState("");
-  //const [siteLocation, setSiteLocation] = useState("");
-  const siteLocation = locationSlug;
+  const [selectedLocationId, setSelectedLocationId] = useState("");
   const [isCreatingReport, setIsCreatingReport] = useState(false);
   const [reports, setReports] = useState<Report[]>([]); // Replace `any` with your Site type
-
+  const [locations, setLocations] = useState<Location[]>([]);
 
   const { session } = useSession();
   const { organization } = useOrganization();
   const router = useRouter();
-  
-  
-  function createClerkSupabaseClient() {
-      return createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        {
-          async accessToken() {
-            return session?.getToken() ?? null;
-          },
-        }
-      );
-    }
 
-  const supabase = createClerkSupabaseClient();
+  const supabase = useMemo(
+    () =>
+      createClerkSupabaseClient(
+        () => session?.getToken?.() ?? Promise.resolve(null),
+      ),
+    [session],
+  );
+
+  const locationNameById = useMemo(
+    () =>
+      new Map(
+        locations.map((location) => [location.id, location.location_name]),
+      ),
+    [locations],
+  );
 
   // Slug generator
   function generateSlug(name: string): string {
@@ -63,44 +64,52 @@ export default function SitesPage() {
 
   // Create new site
   const handleCreateReport = async () => {
-    if (!reportName || !siteLocation) return;
+    if (
+      !reportName ||
+      !selectedLocationId ||
+      !organization?.id ||
+      !session?.user.id
+    ) {
+      return;
+    }
 
     setIsCreatingReport(true);
 
     const slug = generateSlug(reportName);
     const { data, error } = await supabase
-      .from("construction_sites_reports") // replace with your actual table name
+      .from("company_reports")
       .insert([
         {
           report_name: reportName,
           report_slug: slug,
-          report_location: siteLocation,
-          organization_id: organization?.id, // Assuming you have an organization ID
-          created_by: session?.user.id, // Assuming you have a user ID from Clerk
+          report_location: selectedLocationId,
+          organization_id: organization.id,
+          created_by: session.user.id,
         },
-      ]);
-    // Log the data and error for debugging
-    console.log("Creating report with data:", reportName, slug, siteLocation, organization?.id, session?.user.id)
+      ])
+      .select("*");
+
     if (error) {
       console.error("Error creating report:", error);
     } else {
-      console.log("Report created:", data);
       setReports((prev) => [...prev, ...(data || [])]);
     }
 
     setIsCreatingReport(false);
     setModalOpen(false);
     setReportName("");
-    //setSiteLocation("");
+    setSelectedLocationId("");
   };
 
-  // Fetch existing sites
   useEffect(() => {
-    if (!organization) return;
-    const fetchReports = async () => {
+    if (!organization?.id) return;
 
-      //console.log("Organization id", organization)
-      const { data, error } = await supabase.from("construction_sites_reports").select("*").eq("organization_id", organization?.id).eq("report_location", locationSlug);
+    const fetchReports = async () => {
+      const { data, error } = await supabase
+        .from("company_reports")
+        .select("*")
+        .eq("organization_id", organization.id)
+        .order("created_at", { ascending: false });
 
       if (error) {
         console.error("Error fetching reports:", error);
@@ -110,10 +119,28 @@ export default function SitesPage() {
     };
 
     fetchReports();
-  }, [supabase, organization])
+  }, [supabase, organization?.id]);
 
+  useEffect(() => {
+    if (!organization?.id) return;
 
-  
+    const fetchLocations = async () => {
+      const { data, error } = await supabase
+        .from("company_locations")
+        .select("id, location_name")
+        .eq("organization_id", organization.id)
+        .order("location_name", { ascending: true });
+
+      if (error) {
+        console.error("Error fetching locations:", error);
+        return;
+      }
+
+      setLocations(data || []);
+    };
+
+    fetchLocations();
+  }, [supabase, organization?.id]);
 
   return (
     <>
@@ -142,14 +169,18 @@ export default function SitesPage() {
               className="w-full border rounded p-2 mt-2"
             />
 
-            {/* <input
-              type="text"
-              placeholder="Enter site location"
-              value={siteLocation}
-              onChange={(e) => setSiteLocation(e.target.value)}
+            <select
+              value={selectedLocationId}
+              onChange={(e) => setSelectedLocationId(e.target.value)}
               className="w-full border rounded p-2 mt-2"
-            /> */}
-            {/* here we dont actually need to have the user select the location for the report because the app is now modular with restrcited acccess */}
+            >
+              <option value="">Select a location</option>
+              {locations.map((location) => (
+                <option key={location.id} value={location.id}>
+                  {location.location_name}
+                </option>
+              ))}
+            </select>
 
             <Button
               className="mt-4 w-full"
@@ -175,17 +206,22 @@ export default function SitesPage() {
             {reports.map((report) => (
               <button
                 key={report.id}
-                   onClick={() => router.push(`/orgs/${organization?.slug}/${siteLocation}/reports/${report.report_slug}`)} // handle navigation here
-                //={() => router.push(`/${report.report_slug}`)} // handle navigation here
+                onClick={() =>
+                  router.push(
+                    `/orgs/${organization?.slug}/reports/${report.report_slug}`,
+                  )
+                }
                 className="group relative flex flex-col justify-between border rounded-xl p-6 bg-white shadow-sm hover:shadow-md transition-all text-left w-full h-40 focus:outline-none focus:ring-2 focus:ring-primary"
               >
                 <div>
                   <p className="text-lg text-muted-foreground">
-                    {report.report_name} <ChevronRight className="absolute right-6 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 group-hover:text-primary transition-colors" />
+                    {report.report_name}{" "}
+                    <ChevronRight className="absolute right-6 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 group-hover:text-primary transition-colors" />
                   </p>
                   <p className="text-sm text-muted-foreground mt-1 flex items-center">
                     <MapPinned className="inline-block mr-1 h-4 w-4" />
-                    {report.report_location}
+                    {locationNameById.get(report.report_location) ||
+                      report.report_location}
                   </p>
                 </div>
               </button>

@@ -4,8 +4,8 @@ import { BlockNoteView } from "@blocknote/shadcn";
 import "@blocknote/shadcn/style.css";
 import { Block, BlockNoteEditor, PartialBlock } from "@blocknote/core";
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { createClient } from "@supabase/supabase-js";
 import { useSession, useOrganization } from "@clerk/nextjs";
+import { createClerkSupabaseClient } from "@/lib/supabase-client";
 
 // ---------------- Simple debounce ----------------
 function debounce<F extends (...args: any[]) => void>(fn: F, delay: number) {
@@ -20,28 +20,24 @@ export default function Editor({ reportSlug }: { reportSlug: string }) {
   const { session } = useSession();
   const { organization } = useOrganization();
 
-  function createClerkSupabaseClient() {
-    return createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        async accessToken() {
-          return session?.getToken() ?? null;
-        },
-      }
-    );
-  }
+  const supabase = useMemo(
+    () =>
+      createClerkSupabaseClient(
+        () => session?.getToken?.() ?? Promise.resolve(null),
+      ),
+    [session],
+  );
 
-  const supabase = createClerkSupabaseClient();
-
-  const [initialContent, setInitialContent] = useState<PartialBlock[] | "loading">("loading");
+  const [initialContent, setInitialContent] = useState<
+    PartialBlock[] | "loading"
+  >("loading");
 
   // ---------------- Save to Supabase ----------------
   const saveToSupabase = useCallback(
     async (jsonBlocks: Block[]) => {
       if (!session) return;
 
-      const { error } = await supabase.from("construction_sites_reports").upsert({
+      const { error } = await supabase.from("company_reports").upsert({
         organization_id: organization?.id ?? null,
         report_slug: reportSlug,
         report_content: jsonBlocks,
@@ -52,58 +48,56 @@ export default function Editor({ reportSlug }: { reportSlug: string }) {
         console.error("Error saving:", error.message);
       }
     },
-    [session, organization, supabase, reportSlug]
+    [session, organization, supabase, reportSlug],
   );
 
   const debouncedSave = useMemo(
     () => debounce(saveToSupabase, 3000), // ⏳ 3s debounce
-    [saveToSupabase]
+    [saveToSupabase],
   );
 
   // ---------------- Load initial content ----------------
   useEffect(() => {
-  if (!session) return;
+    if (!session) return;
 
-  let cancelled = false;
+    let cancelled = false;
 
-  async function loadFromSupabase() {
-    try {
-      const { data, error } = await supabase
-        .from("construction_sites_reports")
-        .select("report_content")
-        .eq("organization_id", organization?.id ?? null)
-        .eq("report_slug", reportSlug)
-        .single(); // ✅ enforce exactly 1 row
+    async function loadFromSupabase() {
+      try {
+        const { data, error } = await supabase
+          .from("company_reports")
+          .select("report_content")
+          .eq("organization_id", organization?.id ?? null)
+          .eq("report_slug", reportSlug)
+          .single(); // ✅ enforce exactly 1 row
 
-      if (cancelled) return;
+        if (cancelled) return;
 
-      if (error) {
-        console.error("Error loading report:", error.message);
-        setInitialContent([]); // ✅ fallback → empty doc
-        return;
-      }
+        if (error) {
+          console.error("Error loading report:", error.message);
+          setInitialContent([]); // ✅ fallback → empty doc
+          return;
+        }
 
-      if (!data?.report_content) {
-        setInitialContent([]); // ✅ start fresh if no content
-      } else {
-        setInitialContent(data.report_content);
-      }
-    } catch (err) {
-      if (!cancelled) {
-        console.error("Unexpected error loading report:", err);
-        setInitialContent([]); // ✅ safe fallback
+        if (!data?.report_content) {
+          setInitialContent([]); // ✅ start fresh if no content
+        } else {
+          setInitialContent(data.report_content);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error("Unexpected error loading report:", err);
+          setInitialContent([]); // ✅ safe fallback
+        }
       }
     }
-  }
 
-  loadFromSupabase();
+    loadFromSupabase();
 
-  return () => {
-    cancelled = true; // ✅ prevents setState after unmount
-  };
-}, [session, organization?.id, reportSlug, supabase]);
-
-
+    return () => {
+      cancelled = true; // ✅ prevents setState after unmount
+    };
+  }, [session, organization?.id, reportSlug, supabase]);
 
   // ---------------- Setup Editor ----------------
   const editor = useMemo(() => {

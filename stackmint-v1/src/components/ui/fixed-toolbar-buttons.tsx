@@ -47,18 +47,14 @@ import { ToggleToolbarButton } from "./toggle-toolbar-button";
 import { ToolbarGroup } from "./toolbar";
 import { TurnIntoToolbarButton } from "./turn-into-toolbar-button";
 import { CitationToolbarButton } from "./citation-toolbar-button";
-import { useOrganization } from "@clerk/nextjs";
 import { useParams } from "next/navigation";
 
 export function FixedToolbarButtons() {
   const readOnly = useEditorReadOnly();
-  //This is all wrong i need to change it tommowrrow by putting the code in the correct place i dont think this is the file im supposed to keep it in
-
   const params = useParams();
-  //const { locationSlug } = useParams();
-  
+  const locationId = params?.locationId as string | undefined;
   const locationSlug = params?.locationSlug as string | undefined;
-
+  const locationRef = locationId ?? locationSlug;
 
   return (
     <div className="flex w-full">
@@ -154,9 +150,7 @@ export function FixedToolbarButtons() {
             <LineHeightToolbarButton />
             <OutdentToolbarButton />
             <IndentToolbarButton />
-            <CitationToolbarButton
-              locationSlug={locationSlug ?? ""}
-            />
+            <CitationToolbarButton locationRef={locationRef ?? ""} />
           </ToolbarGroup>
 
           <ToolbarGroup>

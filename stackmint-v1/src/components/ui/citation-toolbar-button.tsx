@@ -20,9 +20,9 @@ import { DataTableDemo, UploadedFile } from "@/components/file-table";
 import { createClerkSupabaseClient } from "@/lib/supabase-client";
 
 export function CitationToolbarButton({
-  locationSlug,
+  locationRef,
 }: {
-  locationSlug: string;
+  locationRef: string;
 }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [siteId, setSiteId] = useState<string | null>(null);
@@ -38,15 +38,15 @@ export function CitationToolbarButton({
   const supabase = useMemo(
     () =>
       createClerkSupabaseClient(
-        () => session?.getToken?.() ?? Promise.resolve(null)
+        () => session?.getToken?.() ?? Promise.resolve(null),
       ),
-    [session]
+    [session],
   );
 
   useEffect(() => {
-    // when modal opens, fetch site id for the given slug (single call)
+    // Resolve the current location route segment to the underlying site id.
     if (!modalOpen) return;
-    if (!organization || !locationSlug) {
+    if (!organization || !locationRef) {
       setSiteId(null);
       return;
     }
@@ -59,7 +59,7 @@ export function CitationToolbarButton({
           .from("construction_sites")
           .select("id")
           .eq("organization_id", organization.id)
-          .eq("site_slug", locationSlug)
+          .or(`id.eq.${locationRef},site_slug.eq.${locationRef}`)
           .limit(1)
           .single();
 
@@ -81,7 +81,7 @@ export function CitationToolbarButton({
     return () => {
       mounted = false;
     };
-  }, [modalOpen, organization, locationSlug, supabase]);
+  }, [modalOpen, organization, locationRef, supabase]);
 
   // const handleSelectionChange = (rows: UploadedFile[]) => {
   //   setSelectedFiles(rows);
@@ -161,7 +161,7 @@ export function CitationToolbarButton({
               </div>
             ) : (
               <div className="p-4 text-center text-muted-foreground">
-                No site found for slug: <strong>{locationSlug}</strong>
+                No site found for location: <strong>{locationRef}</strong>
               </div>
             )}
           </div>

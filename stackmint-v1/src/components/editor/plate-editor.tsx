@@ -1,14 +1,14 @@
-'use client';
+"use client";
 
-import * as React from 'react';
+import * as React from "react";
 
-import { normalizeNodeId } from 'platejs';
-import { Plate, usePlateEditor } from 'platejs/react';
-import { createClient } from '@supabase/supabase-js';
-import { useSession } from '@clerk/nextjs';
-import { EditorKit } from '@/components/editor/editor-kit';
-import { SettingsDialog } from '@/components/editor/settings-dialog';
-import { Editor, EditorContainer } from '@/components/ui/editor';
+import { normalizeNodeId } from "platejs";
+import { Plate, usePlateEditor } from "platejs/react";
+import { useSession } from "@clerk/nextjs";
+import { EditorKit } from "@/components/editor/editor-kit";
+import { SettingsDialog } from "@/components/editor/settings-dialog";
+import { Editor, EditorContainer } from "@/components/ui/editor";
+import { createClerkSupabaseClient } from "@/lib/supabase-client";
 //import { CitationPlugin } from './plugins/citation-plugin';
 
 // --- your debounce hook
@@ -34,7 +34,9 @@ function stripIds(nodes: any): any {
 
   const nodeArray = Array.isArray(nodes)
     ? nodes
-    : (nodes?.children && Array.isArray(nodes.children) ? nodes.children : null);
+    : nodes?.children && Array.isArray(nodes.children)
+      ? nodes.children
+      : null;
 
   if (!nodeArray) return nodes;
 
@@ -47,10 +49,16 @@ function stripIds(nodes: any): any {
   });
 }
 
-export function PlateEditor({ docId, initialValue, }: { docId?: string; initialValue?: any; }) {
+export function PlateEditor({
+  docId,
+  initialValue,
+}: {
+  docId?: string;
+  initialValue?: any;
+}) {
   const defaultValue = React.useMemo(
     () => (initialValue ? normalizeNodeId(initialValue) : value),
-    [initialValue]
+    [initialValue],
   );
 
   const { session } = useSession();
@@ -62,45 +70,38 @@ export function PlateEditor({ docId, initialValue, }: { docId?: string; initialV
     value: defaultValue,
   });
 
-
-  function createClerkSupabaseClient() {
-    return createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        async accessToken() {
-          return session?.getToken() ?? null;
-        },
-      }
-    );
-  }
-
-  const client = createClerkSupabaseClient();
+  const client = React.useMemo(
+    () =>
+      createClerkSupabaseClient(
+        () => session?.getToken?.() ?? Promise.resolve(null),
+      ),
+    [session],
+  );
 
   // state to hold stripped value from onChange
 
   // pass it through debounce
 
   async function saveDoc(id: string, content: any) {
-  try {
-    const { data, error } = await client
-      .from('construction_sites_reports')
-      .upsert({
-        id,
-        report_content: content,
-        updated_at: new Date().toISOString(),
-    })
-      .select(); // returns the row after upsert
+    try {
+      const { data, error } = await client
+        .from("company_reports")
+        .upsert({
+          id,
+          report_content: content,
+          updated_at: new Date().toISOString(),
+        })
+        .select(); // returns the row after upsert
 
-    if (error) throw error;
+      if (error) throw error;
 
-    //console.log('✅ Document saved successfully:', data);
-    return data;
-  } catch (err) {
-    console.error('❌ Error saving document to construction_sites_reports:', err);
-    return null;
+      //console.log('✅ Document saved successfully:', data);
+      return data;
+    } catch (err) {
+      console.error("❌ Error saving document to company_reports:", err);
+      return null;
+    }
   }
-}
 
   // effect fires when debouncedValue updates
   React.useEffect(() => {
@@ -127,7 +128,6 @@ export function PlateEditor({ docId, initialValue, }: { docId?: string; initialV
     </Plate>
   );
 }
-
 
 const value = normalizeNodeId([
   {
