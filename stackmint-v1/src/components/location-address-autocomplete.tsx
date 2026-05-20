@@ -58,6 +58,11 @@ export function LocationAddressAutocomplete({
       );
 
       if (!response.ok) {
+        console.error(
+          "Nominatim geocoding failed:",
+          response.status,
+          response.statusText,
+        );
         setSuggestions([]);
         return;
       }
@@ -87,7 +92,13 @@ export function LocationAddressAutocomplete({
   };
 
   const handleSelect = (result: NominatimResult) => {
-    onSelect(result.display_name, parseFloat(result.lat), parseFloat(result.lon));
+    const lat = parseFloat(result.lat);
+    const lng = parseFloat(result.lon);
+    if (isNaN(lat) || isNaN(lng)) {
+      console.error("Nominatim returned invalid coordinates:", result.lat, result.lon);
+      return;
+    }
+    onSelect(result.display_name, lat, lng);
     setIsOpen(false);
     setSuggestions([]);
   };
