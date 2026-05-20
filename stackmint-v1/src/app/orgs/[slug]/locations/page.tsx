@@ -113,19 +113,24 @@ export default function SitesPage() {
     try {
       const slug = generateSlug(locationName);
 
+      // Build insert payload; only include coordinates when they were
+      // captured via autocomplete so the insert never fails if the
+      // latitude/longitude columns have not been added to the table yet.
+      const insertPayload: Record<string, unknown> = {
+        location_name: locationName.trim(),
+        location_slug: slug,
+        location_address: locationAddress.trim(),
+        organization_id: organization.id,
+        created_by: session.user.id,
+      };
+      if (locationLat !== null && locationLng !== null) {
+        insertPayload.latitude = locationLat;
+        insertPayload.longitude = locationLng;
+      }
+
       const { data, error } = await supabase
         .from("company_locations")
-        .insert([
-          {
-            location_name: locationName.trim(),
-            location_slug: slug,
-            location_address: locationAddress.trim(),
-            latitude: locationLat,
-            longitude: locationLng,
-            organization_id: organization.id,
-            created_by: session.user.id,
-          },
-        ])
+        .insert([insertPayload])
         .select("*");
 
       if (error) {
