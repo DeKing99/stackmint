@@ -1,5 +1,10 @@
 -- company_locations geocoding migration
--- Fixes location_address column type (text[] → text) and adds latitude/longitude.
+-- BREAKING CHANGES:
+--   1. Converts location_address column type from text[] (array) to text
+--      - Existing array values: promotes first element to plain string
+--      - Empty arrays: converted to empty string
+--   2. Adds latitude and longitude columns (float8) for geocoding
+--   3. Creates index on (latitude, longitude) for geo-proximity queries
 -- Safe to run multiple times.
 
 BEGIN;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, ChangeEvent } from "react";
 
 type NominatimResult = {
   place_id: number;
@@ -29,13 +29,23 @@ export function LocationAddressAutocomplete({
   const [isOpen, setIsOpen] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const requestSeqRef = useRef(0);
+  const lastRequestTimeRef = useRef(0);
 
   const fetchSuggestions = useCallback(async (query: string) => {
     if (query.trim().length < 3) {
+      abortRef.current?.abort();
       setSuggestions([]);
       setIsOpen(false);
       return;
     }
+
+    const requestId = ++requestSeqRef.current;
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     setIsLoading(true);
     try {
@@ -49,11 +59,7 @@ export function LocationAddressAutocomplete({
       const response = await fetch(
         `https://nominatim.openstreetmap.org/search?${params.toString()}`,
         {
-          headers: {
-            "Accept-Language": "en",
-            // Nominatim requires a descriptive User-Agent
-            "User-Agent": "Stackmint/1.0 (https://stackmint.app)",
-          },
+          signal: controller.signal,
         },
       );
 
@@ -63,18 +69,30 @@ export function LocationAddressAutocomplete({
           response.status,
           response.statusText,
         );
-        setSuggestions([]);
+        if (requestId === requestSeqRef.current) {
+          setSuggestions([]);
+          setIsOpen(false);
+          setIsLoading(false);
+        }
         return;
       }
 
       const data: NominatimResult[] = await response.json();
-      setSuggestions(data);
-      setIsOpen(data.length > 0);
+      if (requestId === requestSeqRef.current) {
+        setSuggestions(data);
+        setIsOpen(data.length > 0);
+      }
     } catch (err) {
+      if ((err as DOMException)?.name === "AbortError") return;
       console.error("Nominatim geocoding request failed:", err);
-      setSuggestions([]);
+      if (requestId === requestSeqRef.current) {
+        setSuggestions([]);
+        setIsOpen(false);
+      }
     } finally {
-      setIsLoading(false);
+      if (requestId === requestSeqRef.current) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
@@ -95,7 +113,11 @@ export function LocationAddressAutocomplete({
     const lat = parseFloat(result.lat);
     const lng = parseFloat(result.lon);
     if (isNaN(lat) || isNaN(lng)) {
-      console.error("Nominatim returned invalid coordinates:", result.lat, result.lon);
+      console.error(
+        "Nominatim returned invalid coordinates:",
+        result.lat,
+        result.lon,
+      );
       return;
     }
     onSelect(result.display_name, lat, lng);
@@ -123,6 +145,7 @@ export function LocationAddressAutocomplete({
       if (debounceRef.current) {
         clearTimeout(debounceRef.current);
       }
+      abortRef.current?.abort();
     };
   }, []);
 
