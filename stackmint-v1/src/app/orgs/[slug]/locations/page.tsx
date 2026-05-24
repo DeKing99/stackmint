@@ -18,15 +18,12 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClerkSupabaseClient } from "@/lib/supabase-client";
-import { LocationAddressAutocomplete } from "@/components/location-address-autocomplete";
 
 type Location = {
   id: string;
   location_name: string;
   location_slug: string;
   location_address: string;
-  latitude: number | null;
-  longitude: number | null;
   created_by: string;
   organization_id: string;
   created_at?: string;
@@ -38,8 +35,6 @@ export default function SitesPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [locationName, setLocationName] = useState("");
   const [locationAddress, setLocationAddress] = useState("");
-  const [locationLat, setLocationLat] = useState<number | null>(null);
-  const [locationLng, setLocationLng] = useState<number | null>(null);
   const [isCreatingLocation, setIsCreatingLocation] = useState(false);
   const [isLoadingLocations, setIsLoadingLocations] = useState(true);
   const [locations, setLocations] = useState<Location[]>([]);
@@ -120,8 +115,6 @@ export default function SitesPage() {
             location_name: locationName.trim(),
             location_slug: slug,
             location_address: locationAddress.trim(),
-            latitude: locationLat,
-            longitude: locationLng,
             organization_id: organization.id,
             created_by: session.user.id,
           },
@@ -150,8 +143,6 @@ export default function SitesPage() {
       setModalOpen(false);
       setLocationName("");
       setLocationAddress("");
-      setLocationLat(null);
-      setLocationLng(null);
     } catch (error) {
       console.error("Unexpected error creating location:", error);
       showAlert(
@@ -232,8 +223,8 @@ export default function SitesPage() {
             <DialogHeader>
               <DialogTitle>Create a new location</DialogTitle>
               <DialogDescription>
-                Add a new location by providing the name and address. Search
-                for an address to automatically capture its coordinates.
+                Add a new location by providing the name and address. You can
+                update the address with Google Maps integration later.
               </DialogDescription>
             </DialogHeader>
 
@@ -256,32 +247,18 @@ export default function SitesPage() {
                 <label className="text-sm font-medium text-gray-700">
                   Location Address *
                 </label>
-                <LocationAddressAutocomplete
+                <input
+                  type="text"
+                  placeholder="e.g., 123 Main Street, City, State 12345"
                   value={locationAddress}
-                  onChange={(val) => {
-                    setLocationAddress(val);
-                    // Clear coords when user edits address manually
-                    setLocationLat(null);
-                    setLocationLng(null);
-                  }}
-                  onSelect={(address, lat, lng) => {
-                    setLocationAddress(address);
-                    setLocationLat(lat);
-                    setLocationLng(lng);
-                  }}
+                  onChange={(e) => setLocationAddress(e.target.value)}
                   disabled={isCreatingLocation}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:bg-gray-100"
                 />
-                {locationLat !== null && locationLng !== null ? (
-                  <p className="text-xs text-green-600 mt-1">
-                    ✓ Coordinates captured ({locationLat.toFixed(4)},{" "}
-                    {locationLng.toFixed(4)})
-                  </p>
-                ) : (
-                  <p className="text-xs text-gray-500 mt-1">
-                    Start typing to search for an address and select one to
-                    capture its coordinates
-                  </p>
-                )}
+                <p className="text-xs text-gray-500 mt-1">
+                  Tip: You can integrate Google Maps API later for address
+                  lookup
+                </p>
               </div>
             </div>
 
@@ -292,8 +269,6 @@ export default function SitesPage() {
                   setModalOpen(false);
                   setLocationName("");
                   setLocationAddress("");
-                  setLocationLat(null);
-                  setLocationLng(null);
                 }}
                 disabled={isCreatingLocation}
               >
