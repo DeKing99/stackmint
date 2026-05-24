@@ -41,6 +41,8 @@ type NominatimResult = {
 
 type AlertType = "success" | "error" | null;
 
+const ADDRESS_SEARCH_DEBOUNCE_MS = 1000;
+
 export default function SitesPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [locationName, setLocationName] = useState("");
@@ -61,6 +63,8 @@ export default function SitesPage() {
   const addressDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const suggestionsRef = useRef<HTMLDivElement>(null);
+
+  const { session } = useSession();
   const { organization } = useOrganization();
   const router = useRouter();
 
@@ -99,8 +103,14 @@ export default function SitesPage() {
     }
     setIsSearchingAddress(true);
     try {
+      const params = new URLSearchParams({
+        format: "json",
+        q: query,
+        limit: "5",
+        addressdetails: "1",
+      });
       const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&addressdetails=1`,
+        `https://nominatim.openstreetmap.org/search?${params.toString()}`,
         {
           headers: {
             "Accept-Language": "en",
@@ -109,7 +119,7 @@ export default function SitesPage() {
         },
       );
       if (!res.ok) {
-        console.error(`Address search returned status ${res.status}`);
+        console.error(`Address search for '${query}' returned status ${res.status}`);
         setAddressSuggestions([]);
         setShowSuggestions(false);
         return;
@@ -137,7 +147,7 @@ export default function SitesPage() {
     }
     addressDebounceRef.current = setTimeout(() => {
       searchAddress(value);
-    }, 1000);
+    }, ADDRESS_SEARCH_DEBOUNCE_MS);
   };
 
   // Handle suggestion selection
@@ -340,7 +350,8 @@ export default function SitesPage() {
               <DialogTitle>Create a new location</DialogTitle>
               <DialogDescription>
                 Add a new location by providing the name and address. Start
-                typing an address to search and confirm coordinates automatically.
+                typing an address and select a suggestion from the dropdown to
+                confirm coordinates automatically.
               </DialogDescription>
             </DialogHeader>
 
