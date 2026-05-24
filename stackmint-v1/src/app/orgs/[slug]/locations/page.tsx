@@ -119,7 +119,7 @@ export default function SitesPage() {
         },
       );
       if (!res.ok) {
-        console.error(`Address search for '${query}' returned status ${res.status}`);
+        console.error(`Address search returned status ${res.status}`);
         setAddressSuggestions([]);
         setShowSuggestions(false);
         return;
@@ -153,8 +153,10 @@ export default function SitesPage() {
   // Handle suggestion selection
   const handleSelectSuggestion = (suggestion: NominatimResult) => {
     setLocationAddress(suggestion.display_name);
-    setLocationLatitude(parseFloat(suggestion.lat));
-    setLocationLongitude(parseFloat(suggestion.lon));
+    const lat = parseFloat(suggestion.lat);
+    const lon = parseFloat(suggestion.lon);
+    setLocationLatitude(isNaN(lat) ? null : lat);
+    setLocationLongitude(isNaN(lon) ? null : lon);
     setShowSuggestions(false);
     setAddressSuggestions([]);
     setFocusedSuggestionIndex(-1);
@@ -196,6 +198,15 @@ export default function SitesPage() {
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Clean up debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (addressDebounceRef.current) {
+        clearTimeout(addressDebounceRef.current);
+      }
+    };
   }, []);
 
   // Validate form inputs
@@ -399,10 +410,7 @@ export default function SitesPage() {
                   )}
                 </div>
                 {locationLatitude && locationLongitude && (
-                  <p
-                    className="text-xs text-green-600 mt-1 flex items-center gap-1"
-                    aria-label={`Location confirmed. Latitude: ${locationLatitude.toFixed(5)}, Longitude: ${locationLongitude.toFixed(5)}`}
-                  >
+                  <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
                     <CheckCircle className="h-3 w-3" aria-hidden="true" />
                     Location confirmed ({locationLatitude.toFixed(5)}, {locationLongitude.toFixed(5)})
                   </p>
