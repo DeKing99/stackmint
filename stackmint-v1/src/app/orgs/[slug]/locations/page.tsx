@@ -102,13 +102,17 @@ export default function SitesPage() {
       const res = await fetch(
         `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&addressdetails=1`,
         {
-          headers: { "Accept-Language": "en" },
+          headers: {
+            "Accept-Language": "en",
+            "User-Agent": "Stackmint/1.0 (contact@stackmint.app)",
+          },
         },
       );
       const results: NominatimResult[] = await res.json();
       setAddressSuggestions(results);
       setShowSuggestions(results.length > 0);
-    } catch {
+    } catch (err) {
+      console.error("Address search failed:", err);
       setAddressSuggestions([]);
       setShowSuggestions(false);
     } finally {
@@ -343,9 +347,12 @@ export default function SitesPage() {
                   )}
                 </div>
                 {locationLatitude && locationLongitude && (
-                  <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
-                    <CheckCircle className="h-3 w-3" />
-                    Location confirmed · {locationLatitude.toFixed(5)}, {locationLongitude.toFixed(5)}
+                  <p
+                    className="text-xs text-green-600 mt-1 flex items-center gap-1"
+                    aria-label={`Location confirmed. Latitude: ${locationLatitude.toFixed(5)}, Longitude: ${locationLongitude.toFixed(5)}`}
+                  >
+                    <CheckCircle className="h-3 w-3" aria-hidden="true" />
+                    Location confirmed ({locationLatitude.toFixed(5)}, {locationLongitude.toFixed(5)})
                   </p>
                 )}
                 {!locationLatitude && locationAddress.trim().length > 0 && (
