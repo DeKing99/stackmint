@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,6 +15,7 @@ import {
   ChevronRight,
   AlertCircle,
   CheckCircle,
+  Loader2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClerkSupabaseClient } from "@/lib/supabase-client";
@@ -24,9 +25,18 @@ type Location = {
   location_name: string;
   location_slug: string;
   location_address: string;
+  latitude?: number | null;
+  longitude?: number | null;
   created_by: string;
   organization_id: string;
   created_at?: string;
+};
+
+type NominatimResult = {
+  place_id: number;
+  display_name: string;
+  lat: string;
+  lon: string;
 };
 
 type AlertType = "success" | "error" | null;
@@ -35,6 +45,11 @@ export default function SitesPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [locationName, setLocationName] = useState("");
   const [locationAddress, setLocationAddress] = useState("");
+  const [locationLatitude, setLocationLatitude] = useState<number | null>(null);
+  const [locationLongitude, setLocationLongitude] = useState<number | null>(null);
+  const [addressSuggestions, setAddressSuggestions] = useState<NominatimResult[]>([]);
+  const [isSearchingAddress, setIsSearchingAddress] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [isCreatingLocation, setIsCreatingLocation] = useState(false);
   const [isLoadingLocations, setIsLoadingLocations] = useState(true);
   const [locations, setLocations] = useState<Location[]>([]);
@@ -42,6 +57,8 @@ export default function SitesPage() {
     type: null,
     message: "",
   });
+  const addressDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
 
   const { session } = useSession();
   const { organization } = useOrganization();
@@ -73,6 +90,69 @@ export default function SitesPage() {
       .replace(/-+/g, "-");
   }
 
+  // Search address suggestions using Nominatim (OpenStreetMap free API)
+  const searchAddress = useCallback(async (query: string) => {
+    if (query.trim().length < 3) {
+      setAddressSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+    setIsSearchingAddress(true);
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&addressdetails=1`,
+        {
+          headers: { "Accept-Language": "en" },
+        },
+      );
+      const results: NominatimResult[] = await res.json();
+      setAddressSuggestions(results);
+      setShowSuggestions(results.length > 0);
+    } catch {
+      setAddressSuggestions([]);
+      setShowSuggestions(false);
+    } finally {
+      setIsSearchingAddress(false);
+    }
+  }, []);
+
+  // Handle address input change with debounce
+  const handleAddressChange = (value: string) => {
+    setLocationAddress(value);
+    // Reset coordinates when user edits the address manually
+    setLocationLatitude(null);
+    setLocationLongitude(null);
+    if (addressDebounceRef.current) {
+      clearTimeout(addressDebounceRef.current);
+    }
+    addressDebounceRef.current = setTimeout(() => {
+      searchAddress(value);
+    }, 400);
+  };
+
+  // Handle suggestion selection
+  const handleSelectSuggestion = (suggestion: NominatimResult) => {
+    setLocationAddress(suggestion.display_name);
+    setLocationLatitude(parseFloat(suggestion.lat));
+    setLocationLongitude(parseFloat(suggestion.lon));
+    setShowSuggestions(false);
+    setAddressSuggestions([]);
+  };
+
+  // Close suggestions when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        suggestionsRef.current &&
+        !suggestionsRef.current.contains(e.target as Node)
+      ) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   // Validate form inputs
   const validateLocationForm = (): string | null => {
     if (!locationName.trim()) {
@@ -83,9 +163,6 @@ export default function SitesPage() {
     }
     if (locationName.trim().length < 2) {
       return "Location name must be at least 2 characters";
-    }
-    if (locationAddress.trim().length < 5) {
-      return "Location address must be at least 5 characters";
     }
     return null;
   };
@@ -115,6 +192,8 @@ export default function SitesPage() {
             location_name: locationName.trim(),
             location_slug: slug,
             location_address: locationAddress.trim(),
+            latitude: locationLatitude,
+            longitude: locationLongitude,
             organization_id: organization.id,
             created_by: session.user.id,
           },
@@ -143,6 +222,8 @@ export default function SitesPage() {
       setModalOpen(false);
       setLocationName("");
       setLocationAddress("");
+      setLocationLatitude(null);
+      setLocationLongitude(null);
     } catch (error) {
       console.error("Unexpected error creating location:", error);
       showAlert(
@@ -223,8 +304,8 @@ export default function SitesPage() {
             <DialogHeader>
               <DialogTitle>Create a new location</DialogTitle>
               <DialogDescription>
-                Add a new location by providing the name and address. You can
-                update the address with Google Maps integration later.
+                Add a new location by providing the name and address. Start
+                typing an address to search and confirm coordinates automatically.
               </DialogDescription>
             </DialogHeader>
 
@@ -243,22 +324,51 @@ export default function SitesPage() {
                 />
               </div>
 
-              <div>
+              <div className="relative" ref={suggestionsRef}>
                 <label className="text-sm font-medium text-gray-700">
                   Location Address *
                 </label>
-                <input
-                  type="text"
-                  placeholder="e.g., 123 Main Street, City, State 12345"
-                  value={locationAddress}
-                  onChange={(e) => setLocationAddress(e.target.value)}
-                  disabled={isCreatingLocation}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:bg-gray-100"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Tip: You can integrate Google Maps API later for address
-                  lookup
-                </p>
+                <div className="relative mt-1">
+                  <input
+                    type="text"
+                    placeholder="Start typing an address..."
+                    value={locationAddress}
+                    onChange={(e) => handleAddressChange(e.target.value)}
+                    disabled={isCreatingLocation}
+                    autoComplete="off"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:bg-gray-100"
+                  />
+                  {isSearchingAddress && (
+                    <Loader2 className="absolute right-2.5 top-2.5 h-4 w-4 animate-spin text-gray-400" />
+                  )}
+                </div>
+                {locationLatitude && locationLongitude && (
+                  <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                    <CheckCircle className="h-3 w-3" />
+                    Location confirmed · {locationLatitude.toFixed(5)}, {locationLongitude.toFixed(5)}
+                  </p>
+                )}
+                {!locationLatitude && locationAddress.trim().length > 0 && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Select a suggestion from the list to confirm coordinates
+                  </p>
+                )}
+                {showSuggestions && addressSuggestions.length > 0 && (
+                  <ul className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {addressSuggestions.map((suggestion) => (
+                      <li
+                        key={suggestion.place_id}
+                        onMouseDown={() => handleSelectSuggestion(suggestion)}
+                        className="px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 border-b border-gray-100 last:border-0"
+                      >
+                        <span className="flex items-start gap-2">
+                          <MapPinned className="h-4 w-4 text-gray-400 flex-shrink-0 mt-0.5" />
+                          <span className="text-gray-800">{suggestion.display_name}</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
 
@@ -269,6 +379,10 @@ export default function SitesPage() {
                   setModalOpen(false);
                   setLocationName("");
                   setLocationAddress("");
+                  setLocationLatitude(null);
+                  setLocationLongitude(null);
+                  setAddressSuggestions([]);
+                  setShowSuggestions(false);
                 }}
                 disabled={isCreatingLocation}
               >
