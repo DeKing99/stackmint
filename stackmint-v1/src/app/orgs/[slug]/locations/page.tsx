@@ -57,10 +57,10 @@ export default function SitesPage() {
     type: null,
     message: "",
   });
+  const [focusedSuggestionIndex, setFocusedSuggestionIndex] = useState(-1);
   const addressDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const suggestionsRef = useRef<HTMLDivElement>(null);
 
-  const { session } = useSession();
+  const suggestionsRef = useRef<HTMLDivElement>(null);
   const { organization } = useOrganization();
   const router = useRouter();
 
@@ -108,6 +108,12 @@ export default function SitesPage() {
           },
         },
       );
+      if (!res.ok) {
+        console.error(`Address search returned status ${res.status}`);
+        setAddressSuggestions([]);
+        setShowSuggestions(false);
+        return;
+      }
       const results: NominatimResult[] = await res.json();
       setAddressSuggestions(results);
       setShowSuggestions(results.length > 0);
@@ -131,7 +137,7 @@ export default function SitesPage() {
     }
     addressDebounceRef.current = setTimeout(() => {
       searchAddress(value);
-    }, 400);
+    }, 1000);
   };
 
   // Handle suggestion selection
@@ -141,6 +147,31 @@ export default function SitesPage() {
     setLocationLongitude(parseFloat(suggestion.lon));
     setShowSuggestions(false);
     setAddressSuggestions([]);
+    setFocusedSuggestionIndex(-1);
+  };
+
+  // Handle keyboard navigation in the address input
+  const handleAddressKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!showSuggestions || addressSuggestions.length === 0) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setFocusedSuggestionIndex((prev) =>
+        prev < addressSuggestions.length - 1 ? prev + 1 : 0,
+      );
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setFocusedSuggestionIndex((prev) =>
+        prev > 0 ? prev - 1 : addressSuggestions.length - 1,
+      );
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (focusedSuggestionIndex >= 0) {
+        handleSelectSuggestion(addressSuggestions[focusedSuggestionIndex]);
+      }
+    } else if (e.key === "Escape") {
+      setShowSuggestions(false);
+      setFocusedSuggestionIndex(-1);
+    }
   };
 
   // Close suggestions when clicking outside
@@ -338,8 +369,18 @@ export default function SitesPage() {
                     placeholder="Start typing an address..."
                     value={locationAddress}
                     onChange={(e) => handleAddressChange(e.target.value)}
+                    onKeyDown={handleAddressKeyDown}
                     disabled={isCreatingLocation}
                     autoComplete="off"
+                    role="combobox"
+                    aria-autocomplete="list"
+                    aria-expanded={showSuggestions}
+                    aria-controls="address-suggestions"
+                    aria-activedescendant={
+                      focusedSuggestionIndex >= 0
+                        ? `suggestion-${addressSuggestions[focusedSuggestionIndex]?.place_id}`
+                        : undefined
+                    }
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:bg-gray-100"
                   />
                   {isSearchingAddress && (
@@ -361,15 +402,28 @@ export default function SitesPage() {
                   </p>
                 )}
                 {showSuggestions && addressSuggestions.length > 0 && (
-                  <ul className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                    {addressSuggestions.map((suggestion) => (
+                  <ul
+                    id="address-suggestions"
+                    role="listbox"
+                    aria-label="Address suggestions"
+                    className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto"
+                  >
+                    {addressSuggestions.map((suggestion, index) => (
                       <li
                         key={suggestion.place_id}
+                        id={`suggestion-${suggestion.place_id}`}
+                        role="option"
+                        aria-selected={index === focusedSuggestionIndex}
                         onMouseDown={() => handleSelectSuggestion(suggestion)}
-                        className="px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 border-b border-gray-100 last:border-0"
+                        onMouseEnter={() => setFocusedSuggestionIndex(index)}
+                        className={`px-3 py-2 text-sm cursor-pointer border-b border-gray-100 last:border-0 ${
+                          index === focusedSuggestionIndex
+                            ? "bg-gray-100"
+                            : "hover:bg-gray-50"
+                        }`}
                       >
                         <span className="flex items-start gap-2">
-                          <MapPinned className="h-4 w-4 text-gray-400 flex-shrink-0 mt-0.5" />
+                          <MapPinned className="h-4 w-4 text-gray-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
                           <span className="text-gray-800">{suggestion.display_name}</span>
                         </span>
                       </li>
