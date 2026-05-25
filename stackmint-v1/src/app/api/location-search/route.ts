@@ -14,6 +14,8 @@ type MapboxResponse = {
   features?: MapboxFeature[];
 };
 
+const MAX_SUGGESTIONS = 7;
+
 export async function GET(request: NextRequest) {
   const mapboxToken = process.env.MAPBOX_ACCESS_TOKEN;
   if (!mapboxToken) {
@@ -41,7 +43,7 @@ export async function GET(request: NextRequest) {
     );
     url.searchParams.set("access_token", mapboxToken);
     url.searchParams.set("autocomplete", "true");
-    url.searchParams.set("limit", "7");
+    url.searchParams.set("limit", String(MAX_SUGGESTIONS));
     url.searchParams.set("types", "address,place,locality,postcode,region,country");
     url.searchParams.set("language", "en");
 

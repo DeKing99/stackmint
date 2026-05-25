@@ -17,6 +17,7 @@ type LocationAddressAutocompleteProps = {
 
 const DEBOUNCE_DELAY_MS = 300;
 const BLUR_CLOSE_DELAY_MS = 150;
+const MIN_QUERY_LENGTH = 3;
 
 function highlightMatch(text: string, query: string) {
   if (!query.trim()) return text;
@@ -64,7 +65,7 @@ export function LocationAddressAutocomplete({
 
   useEffect(() => {
     const normalizedQuery = debouncedQuery.trim();
-    if (disabled || normalizedQuery.length < 3) {
+    if (disabled || normalizedQuery.length < MIN_QUERY_LENGTH) {
       setSuggestions([]);
       setErrorMessage(null);
       setIsLoading(false);
@@ -112,17 +113,23 @@ export function LocationAddressAutocomplete({
   }, [debouncedQuery, disabled]);
 
   const hasSearchResults = suggestions.length > 0;
-  const hasMeaningfulQuery = debouncedQuery.trim().length >= 3;
+  const hasMeaningfulQuery = debouncedQuery.trim().length >= MIN_QUERY_LENGTH;
   const hasDropdownContent =
     isLoading || Boolean(errorMessage) || hasSearchResults || hasMeaningfulQuery;
 
   const statusMessage = useMemo(() => {
     if (isLoading) return "Searching addresses...";
     if (errorMessage) return errorMessage;
-    if (debouncedQuery.trim().length >= 3 && suggestions.length === 0) {
+    if (
+      debouncedQuery.trim().length >= MIN_QUERY_LENGTH &&
+      suggestions.length === 0
+    ) {
       return "No addresses found. Try a different search term.";
     }
-    if (debouncedQuery.trim().length > 0 && debouncedQuery.trim().length < 3) {
+    if (
+      debouncedQuery.trim().length > 0 &&
+      debouncedQuery.trim().length < MIN_QUERY_LENGTH
+    ) {
       return "Type at least 3 characters to search.";
     }
     return null;
@@ -149,7 +156,7 @@ export function LocationAddressAutocomplete({
           value={value}
           disabled={disabled}
           onFocus={() => {
-            if (hasDropdownContent || value.trim().length >= 3) {
+            if (hasDropdownContent || value.trim().length >= MIN_QUERY_LENGTH) {
               setIsOpen(true);
             }
           }}
