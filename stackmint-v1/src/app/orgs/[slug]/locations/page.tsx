@@ -92,6 +92,9 @@ export default function SitesPage() {
     if (locationAddress.trim().length < 5) {
       return "Location address must be at least 5 characters";
     }
+    if (locationLat === null || locationLng === null) {
+      return "Please select an address suggestion to capture coordinates";
+    }
     return null;
   };
 
@@ -301,7 +304,13 @@ export default function SitesPage() {
               </Button>
               <Button
                 onClick={handleCreateLocation}
-                disabled={isCreatingLocation}
+                disabled={
+                  isCreatingLocation ||
+                  !locationName.trim() ||
+                  !locationAddress.trim() ||
+                  locationLat === null ||
+                  locationLng === null
+                }
               >
                 {isCreatingLocation ? "Creating..." : "Create Location"}
               </Button>

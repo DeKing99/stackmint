@@ -20,6 +20,29 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Location search & autocomplete (Mapbox)
+
+The Locations page uses a server-side Mapbox Geocoding integration (`/api/location-search`) for enterprise-grade autocomplete and coordinate capture.
+
+### Why Mapbox
+- Reliable global geocoding + autocomplete with production-grade SLA support
+- Generous free tier and clear pay-as-you-go scaling model
+- Fast low-latency autocomplete suitable for SaaS UX
+- Commercial usage supported
+
+### Required environment variable
+
+```bash
+MAPBOX_ACCESS_TOKEN=your_mapbox_access_token
+```
+
+Keep this key server-side only (the app calls Mapbox through a Next.js API route).
+
+### Notes
+- The API route applies HTTP cache headers to reduce provider load.
+- Apply rate limiting at your edge/proxy layer (or distributed store like Redis/KV) for horizontally scaled/serverless production.
+- The client autocomplete uses debounce, request cancellation, retry-on-transient-failure, keyboard navigation, and local query-result caching.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

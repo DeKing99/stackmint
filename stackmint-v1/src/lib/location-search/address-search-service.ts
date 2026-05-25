@@ -1,0 +1,64 @@
+export type AddressSuggestion = {
+  id: string;
+  formattedAddress: string;
+  latitude: number;
+  longitude: number;
+  displayName?: string;
+};
+
+type AddressSearchResponse = {
+  suggestions: AddressSuggestion[];
+};
+
+const MAX_ATTEMPTS = 2;
+const RETRY_DELAY_MS = 250;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export async function fetchAddressSuggestions(
+  query: string,
+  signal?: AbortSignal,
+): Promise<AddressSuggestion[]> {
+  const normalizedQuery = query.trim();
+  if (normalizedQuery.length < 3) return [];
+
+  let attemptCount = 0;
+  let lastError: Error | null = null;
+
+  while (attemptCount < MAX_ATTEMPTS) {
+    try {
+      const response = await fetch(
+        `/api/location-search?query=${encodeURIComponent(normalizedQuery)}`,
+        { signal },
+      );
+
+      if (!response.ok) {
+        if (response.status >= 500 && attemptCount < MAX_ATTEMPTS - 1) {
+          attemptCount += 1;
+          await sleep(RETRY_DELAY_MS * attemptCount);
+          continue;
+        }
+        throw new Error(`Address lookup failed (${response.status})`);
+      }
+
+      const data = (await response.json()) as AddressSearchResponse;
+      return Array.isArray(data?.suggestions) ? data.suggestions : [];
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        throw error;
+      }
+      lastError =
+        error instanceof Error
+          ? error
+          : new Error("Address lookup failed unexpectedly");
+      if (attemptCount < MAX_ATTEMPTS - 1) {
+        attemptCount += 1;
+        await sleep(RETRY_DELAY_MS * attemptCount);
+        continue;
+      }
+      break;
+    }
+  }
+
+  throw lastError ?? new Error("Address lookup failed");
+}
