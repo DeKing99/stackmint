@@ -15,6 +15,7 @@ type MapboxResponse = {
 };
 
 const MAX_SUGGESTIONS = 7;
+const MAPBOX_PLACE_TYPES = "address,place,locality,postcode,region,country";
 
 export async function GET(request: NextRequest) {
   const mapboxToken = process.env.MAPBOX_ACCESS_TOKEN;
@@ -44,7 +45,7 @@ export async function GET(request: NextRequest) {
     url.searchParams.set("access_token", mapboxToken);
     url.searchParams.set("autocomplete", "true");
     url.searchParams.set("limit", String(MAX_SUGGESTIONS));
-    url.searchParams.set("types", "address,place,locality,postcode,region,country");
+    url.searchParams.set("types", MAPBOX_PLACE_TYPES);
     url.searchParams.set("language", "en");
 
     const response = await fetch(url.toString(), {

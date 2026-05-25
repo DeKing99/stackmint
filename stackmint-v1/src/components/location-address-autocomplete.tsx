@@ -76,6 +76,8 @@ export function LocationAddressAutocomplete({
 
     const cached = cacheRef.current.get(normalizedQuery.toLowerCase());
     if (cached) {
+      cacheRef.current.delete(normalizedQuery.toLowerCase());
+      cacheRef.current.set(normalizedQuery.toLowerCase(), cached);
       setSuggestions(cached);
       setErrorMessage(null);
       setIsOpen(true);
@@ -152,7 +154,10 @@ export function LocationAddressAutocomplete({
   return (
     <div className="relative mt-1">
       <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Search
+          aria-hidden="true"
+          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+        />
         <input
           id={inputId}
           type="text"
