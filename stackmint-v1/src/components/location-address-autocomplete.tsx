@@ -15,6 +15,9 @@ type LocationAddressAutocompleteProps = {
   disabled?: boolean;
 };
 
+const DEBOUNCE_DELAY_MS = 320;
+const BLUR_CLOSE_DELAY_MS = 140;
+
 function highlightMatch(text: string, query: string) {
   if (!query.trim()) return text;
   const normalizedText = text.toLowerCase();
@@ -55,7 +58,7 @@ export function LocationAddressAutocomplete({
   useEffect(() => {
     const timeout = setTimeout(() => {
       setDebouncedQuery(value);
-    }, 320);
+    }, DEBOUNCE_DELAY_MS);
     return () => clearTimeout(timeout);
   }, [value]);
 
@@ -148,7 +151,7 @@ export function LocationAddressAutocomplete({
             }
           }}
           onBlur={() => {
-            setTimeout(() => setIsOpen(false), 140);
+            setTimeout(() => setIsOpen(false), BLUR_CLOSE_DELAY_MS);
           }}
           onChange={(event) => {
             onChange(event.target.value);
