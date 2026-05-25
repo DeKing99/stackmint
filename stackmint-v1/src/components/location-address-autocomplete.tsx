@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, MapPin, Search, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -56,6 +56,23 @@ export function LocationAddressAutocomplete({
   const requestAbortControllerRef = useRef<AbortController | null>(null);
   const inputId = "location-address-autocomplete-input";
   const listboxId = "location-address-autocomplete-listbox";
+  const trimmedDebouncedQuery = debouncedQuery.trim();
+
+  const touchCacheEntry = useCallback((key: string, value: AddressSuggestion[]) => {
+    cacheRef.current.delete(key);
+    cacheRef.current.set(key, value);
+  }, []);
+
+  const setCacheEntry = useCallback(
+    (key: string, value: AddressSuggestion[]) => {
+      if (cacheRef.current.size >= MAX_CACHE_ENTRIES) {
+        const oldestKey = cacheRef.current.keys().next().value;
+        if (oldestKey) cacheRef.current.delete(oldestKey);
+      }
+      touchCacheEntry(key, value);
+    },
+    [touchCacheEntry],
+  );
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -65,7 +82,7 @@ export function LocationAddressAutocomplete({
   }, [value]);
 
   useEffect(() => {
-    const normalizedQuery = debouncedQuery.trim();
+    const normalizedQuery = trimmedDebouncedQuery;
     if (disabled || normalizedQuery.length < MIN_QUERY_LENGTH) {
       setSuggestions([]);
       setErrorMessage(null);
@@ -74,10 +91,10 @@ export function LocationAddressAutocomplete({
       return;
     }
 
-    const cached = cacheRef.current.get(normalizedQuery.toLowerCase());
+    const normalizedQueryKey = normalizedQuery.toLowerCase();
+    const cached = cacheRef.current.get(normalizedQueryKey);
     if (cached) {
-      cacheRef.current.delete(normalizedQuery.toLowerCase());
-      cacheRef.current.set(normalizedQuery.toLowerCase(), cached);
+      touchCacheEntry(normalizedQueryKey, cached);
       setSuggestions(cached);
       setErrorMessage(null);
       setIsOpen(true);
@@ -94,11 +111,7 @@ export function LocationAddressAutocomplete({
 
     fetchAddressSuggestions(normalizedQuery, controller.signal)
       .then((result) => {
-        if (cacheRef.current.size >= MAX_CACHE_ENTRIES) {
-          const oldestKey = cacheRef.current.keys().next().value;
-          if (oldestKey) cacheRef.current.delete(oldestKey);
-        }
-        cacheRef.current.set(normalizedQuery.toLowerCase(), result);
+        setCacheEntry(normalizedQueryKey, result);
         setSuggestions(result);
         setHighlightedIndex(result.length > 0 ? 0 : -1);
       })
@@ -117,10 +130,10 @@ export function LocationAddressAutocomplete({
       });
 
     return () => controller.abort();
-  }, [debouncedQuery, disabled]);
+  }, [disabled, setCacheEntry, touchCacheEntry, trimmedDebouncedQuery]);
 
   const hasSearchResults = suggestions.length > 0;
-  const hasMeaningfulQuery = debouncedQuery.trim().length >= MIN_QUERY_LENGTH;
+  const hasMeaningfulQuery = trimmedDebouncedQuery.length >= MIN_QUERY_LENGTH;
   const hasDropdownContent =
     isLoading || Boolean(errorMessage) || hasSearchResults || hasMeaningfulQuery;
 
@@ -128,19 +141,22 @@ export function LocationAddressAutocomplete({
     if (isLoading) return "Searching addresses...";
     if (errorMessage) return errorMessage;
     if (
-      debouncedQuery.trim().length >= MIN_QUERY_LENGTH &&
+      trimmedDebouncedQuery.length >= MIN_QUERY_LENGTH &&
       suggestions.length === 0
     ) {
       return "No addresses found. Try a different search term.";
     }
-    if (
-      debouncedQuery.trim().length > 0 &&
-      debouncedQuery.trim().length < MIN_QUERY_LENGTH
-    ) {
+    if (trimmedDebouncedQuery.length > 0 && !hasMeaningfulQuery) {
       return "Type at least 3 characters to search.";
     }
     return null;
-  }, [debouncedQuery, errorMessage, isLoading, suggestions.length]);
+  }, [
+    errorMessage,
+    hasMeaningfulQuery,
+    isLoading,
+    suggestions.length,
+    trimmedDebouncedQuery.length,
+  ]);
 
   const selectSuggestion = (suggestion: AddressSuggestion) => {
     onChange(suggestion.formattedAddress);
@@ -268,11 +284,14 @@ export function LocationAddressAutocomplete({
                     <p className="truncate text-sm font-medium">
                       {highlightMatch(
                         suggestion.displayName || suggestion.formattedAddress,
-                        debouncedQuery.trim(),
+                        trimmedDebouncedQuery,
                       )}
                     </p>
                     <p className="truncate text-xs text-muted-foreground">
-                      {highlightMatch(suggestion.formattedAddress, debouncedQuery.trim())}
+                      {highlightMatch(
+                        suggestion.formattedAddress,
+                        trimmedDebouncedQuery,
+                      )}
                     </p>
                   </div>
                 </div>

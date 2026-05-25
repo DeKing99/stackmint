@@ -10,7 +10,7 @@ type AddressSearchResponse = {
   suggestions: AddressSuggestion[];
 };
 
-const MAX_RETRIES = 1;
+const MAX_ATTEMPTS = 2;
 const RETRY_DELAY_MS = 250;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -25,7 +25,7 @@ export async function fetchAddressSuggestions(
   let attemptCount = 0;
   let lastError: Error | null = null;
 
-  while (attemptCount <= MAX_RETRIES) {
+  while (attemptCount < MAX_ATTEMPTS) {
     try {
       const response = await fetch(
         `/api/location-search?query=${encodeURIComponent(normalizedQuery)}`,
@@ -33,7 +33,7 @@ export async function fetchAddressSuggestions(
       );
 
       if (!response.ok) {
-        if (response.status >= 500 && attemptCount < MAX_RETRIES) {
+        if (response.status >= 500 && attemptCount < MAX_ATTEMPTS - 1) {
           attemptCount += 1;
           await sleep(RETRY_DELAY_MS * attemptCount);
           continue;
@@ -51,7 +51,7 @@ export async function fetchAddressSuggestions(
         error instanceof Error
           ? error
           : new Error("Address lookup failed unexpectedly");
-      if (attemptCount < MAX_RETRIES) {
+      if (attemptCount < MAX_ATTEMPTS - 1) {
         attemptCount += 1;
         await sleep(RETRY_DELAY_MS * attemptCount);
         continue;
