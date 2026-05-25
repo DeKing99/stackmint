@@ -39,8 +39,8 @@ MAPBOX_ACCESS_TOKEN=your_mapbox_access_token
 Keep this key server-side only (the app calls Mapbox through a Next.js API route).
 
 ### Notes
-- The API route applies basic per-IP rate limiting and cache headers.
-- For horizontally scaled/serverless production, move rate limiting state to Redis/KV (distributed store).
+- The API route applies HTTP cache headers to reduce provider load.
+- Apply rate limiting at your edge/proxy layer (or distributed store like Redis/KV) for horizontally scaled/serverless production.
 - The client autocomplete uses debounce, request cancellation, retry-on-transient-failure, keyboard navigation, and local query-result caching.
 
 ## Learn More

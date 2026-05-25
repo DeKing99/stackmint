@@ -15,8 +15,8 @@ type LocationAddressAutocompleteProps = {
   disabled?: boolean;
 };
 
-const DEBOUNCE_DELAY_MS = 320;
-const BLUR_CLOSE_DELAY_MS = 140;
+const DEBOUNCE_DELAY_MS = 300;
+const BLUR_CLOSE_DELAY_MS = 150;
 
 function highlightMatch(text: string, query: string) {
   if (!query.trim()) return text;

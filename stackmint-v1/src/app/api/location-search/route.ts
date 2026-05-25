@@ -14,16 +14,6 @@ type MapboxResponse = {
   features?: MapboxFeature[];
 };
 
-const RATE_LIMIT_WINDOW_MS = 60_000;
-const RATE_LIMIT_MAX_REQUESTS = 30;
-const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
-
-function getRateLimitKey(request: NextRequest) {
-  const forwardedFor = request.headers.get("x-forwarded-for");
-  const ip = forwardedFor?.split(",")[0]?.trim() || "unknown";
-  return `location-search:${ip}`;
-}
-
 export async function GET(request: NextRequest) {
   const mapboxToken = process.env.MAPBOX_ACCESS_TOKEN;
   if (!mapboxToken) {
@@ -43,24 +33,6 @@ export async function GET(request: NextRequest) {
         },
       },
     );
-  }
-
-  const now = Date.now();
-  const rateLimitKey = getRateLimitKey(request);
-  const currentEntry = rateLimitStore.get(rateLimitKey);
-  if (!currentEntry || currentEntry.resetAt <= now) {
-    rateLimitStore.set(rateLimitKey, {
-      count: 1,
-      resetAt: now + RATE_LIMIT_WINDOW_MS,
-    });
-  } else if (currentEntry.count >= RATE_LIMIT_MAX_REQUESTS) {
-    return NextResponse.json(
-      { error: "Too many address search requests. Please retry shortly." },
-      { status: 429 },
-    );
-  } else {
-    currentEntry.count += 1;
-    rateLimitStore.set(rateLimitKey, currentEntry);
   }
 
   try {
