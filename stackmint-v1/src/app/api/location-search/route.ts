@@ -78,7 +78,6 @@ export async function GET(request: NextRequest) {
       headers: {
         Accept: "application/json",
       },
-      next: { revalidate: 60 },
     });
 
     if (!response.ok) {

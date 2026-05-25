@@ -111,7 +111,10 @@ export function LocationAddressAutocomplete({
     return () => controller.abort();
   }, [debouncedQuery, disabled]);
 
-  const hasDropdownContent = isLoading || errorMessage || suggestions.length > 0 || debouncedQuery.trim().length >= 3;
+  const hasSearchResults = suggestions.length > 0;
+  const hasMeaningfulQuery = debouncedQuery.trim().length >= 3;
+  const hasDropdownContent =
+    isLoading || Boolean(errorMessage) || hasSearchResults || hasMeaningfulQuery;
 
   const statusMessage = useMemo(() => {
     if (isLoading) return "Searching addresses...";
