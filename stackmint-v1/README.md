@@ -25,7 +25,7 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 The Locations page uses a server-side Mapbox Geocoding integration (`/api/location-search`) for enterprise-grade autocomplete and coordinate capture.
 
 ### Why Mapbox
-- Reliable global geocoding + autocomplete with production SLA posture
+- Reliable global geocoding + autocomplete with production-grade SLA support
 - Generous free tier and clear pay-as-you-go scaling model
 - Fast low-latency autocomplete suitable for SaaS UX
 - Commercial usage supported

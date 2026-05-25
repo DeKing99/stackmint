@@ -18,6 +18,7 @@ type LocationAddressAutocompleteProps = {
 const DEBOUNCE_DELAY_MS = 300;
 const BLUR_CLOSE_DELAY_MS = 150;
 const MIN_QUERY_LENGTH = 3;
+const MAX_CACHE_ENTRIES = 50;
 
 function highlightMatch(text: string, query: string) {
   if (!query.trim()) return text;
@@ -91,6 +92,10 @@ export function LocationAddressAutocomplete({
 
     fetchAddressSuggestions(normalizedQuery, controller.signal)
       .then((result) => {
+        if (cacheRef.current.size >= MAX_CACHE_ENTRIES) {
+          const oldestKey = cacheRef.current.keys().next().value;
+          if (oldestKey) cacheRef.current.delete(oldestKey);
+        }
         cacheRef.current.set(normalizedQuery.toLowerCase(), result);
         setSuggestions(result);
         setHighlightedIndex(result.length > 0 ? 0 : -1);
