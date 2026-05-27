@@ -106,6 +106,20 @@ def _to_activity_insert_row(row: Dict) -> Dict:
         "spend_amount": _to_float(row.get("amount_spent")),
         "currency": row.get("currency"),
         "company_location_id": row.get("company_location_id"),
+        "department_id": row.get("department_id"),
+        "supplier_id": row.get("supplier_id"),
+        "emission_category_id": row.get("emission_category_id"),
+        "source_system": row.get("source_system"),
+        "invoice_number": row.get("invoice_number"),
+        "reference_code": row.get("reference_code"),
+        "description": row.get("description"),
+        "notes": row.get("notes"),
+        "data_quality_score": _to_float(row.get("data_quality_score")),
+        "verification_status": row.get("verification_status"),
+        "calculation_method": row.get("calculation_method"),
+        "reporting_period": row.get("reporting_period"),
+        "tags": row.get("tags"),
+        "metadata": row.get("metadata"),
     }
 
 

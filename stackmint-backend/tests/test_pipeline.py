@@ -315,6 +315,9 @@ class TestEmissionsCalculation:
         }
         result = calculate_emissions_for_row(mock_sb, row, "act-001")
         assert abs(result["co2e"] - 233.0) < 0.01
+        assert abs(result["emissions_kgco2e"] - 233.0) < 0.01
+        assert abs(result["emissions_tco2e"] - 0.233) < 0.0001
+        assert result["reporting_year"] == 2024
         assert result["activity_id"] == "act-001"
         assert result["emission_factor_id"] == "factor-001"
 
@@ -366,6 +369,42 @@ class TestEmissionsCalculation:
 
         mock_query = mock_sb.table.return_value
         assert mock_query.execute.call_count == 1
+
+    def test_enriched_payload_uses_inserted_activity_dimensions(self):
+        from app.parsing.emissions import calculate_emissions_for_row
+        mock_sb = _mock_supabase_with_factor(0.233)
+        row = {
+            "activity_type": "purchased_electricity",
+            "consumption": 1000.0,
+            "unit": "kwh",
+            "date": "2024-06-15",
+        }
+        inserted_activity = {
+            "organization_id": "org-001",
+            "company_location_id": "loc-001",
+            "department_id": "dept-001",
+            "supplier_id": "sup-001",
+            "emission_category_id": "cat-001",
+            "scope": 2,
+            "category": "purchased_electricity",
+        }
+        result = calculate_emissions_for_row(
+            mock_sb,
+            row,
+            "act-001",
+            inserted_activity=inserted_activity,
+        )
+        assert result["organization_id"] == "org-001"
+        assert result["company_location_id"] == "loc-001"
+        assert result["department_id"] == "dept-001"
+        assert result["supplier_id"] == "sup-001"
+        assert result["emission_category_id"] == "cat-001"
+        assert result["scope"] == 2
+        assert result["category"] == "purchased_electricity"
+        assert result["reporting_year"] == 2024
+        assert result["reporting_month"] == 6
+        assert result["reporting_quarter"] == 2
+        assert result["reporting_period"] == "2024-06"
 
 
 class TestEmissionsBatch:

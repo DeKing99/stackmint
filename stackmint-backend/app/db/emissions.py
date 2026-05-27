@@ -8,7 +8,37 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def _core_payload(row: Dict) -> Dict:
+def _analytics_core_payload(row: Dict) -> Dict:
+    return {
+        "activity_id": row.get("activity_id"),
+        "emission_factor_id": row.get("emission_factor_id"),
+        "co2e": row.get("co2e"),
+        "organization_id": row.get("organization_id"),
+        "company_location_id": row.get("company_location_id"),
+        "department_id": row.get("department_id"),
+        "supplier_id": row.get("supplier_id"),
+        "emission_category_id": row.get("emission_category_id"),
+        "scope": row.get("scope"),
+        "category": row.get("category"),
+        "reporting_year": row.get("reporting_year"),
+        "reporting_month": row.get("reporting_month"),
+        "reporting_quarter": row.get("reporting_quarter"),
+        "reporting_period": row.get("reporting_period"),
+        "emissions_kgco2e": row.get("emissions_kgco2e"),
+        "emissions_tco2e": row.get("emissions_tco2e"),
+        "activity_quantity": row.get("activity_quantity"),
+        "activity_unit": row.get("activity_unit"),
+        "calculation_method": row.get("calculation_method"),
+        "calculation_confidence": row.get("calculation_confidence"),
+        "verification_status": row.get("verification_status"),
+        "source_system": row.get("source_system"),
+        "tags": row.get("tags"),
+        "metadata": row.get("metadata"),
+        "calculated_at": row.get("calculated_at"),
+    }
+
+
+def _legacy_core_payload(row: Dict) -> Dict:
     return {
         "activity_id": row.get("activity_id"),
         "emission_factor_id": row.get("emission_factor_id"),
@@ -19,9 +49,14 @@ def _core_payload(row: Dict) -> Dict:
 
 def _build_insert_candidates(rows: List[Dict]) -> List[List[Dict]]:
     full_rows = [dict(row) for row in rows]
-    core_rows = [_core_payload(row) for row in rows]
+    analytics_core_rows = [_analytics_core_payload(row) for row in rows]
+    legacy_core_rows = [_legacy_core_payload(row) for row in rows]
 
-    return [full_rows, core_rows]
+    # Insert strategy:
+    # 1) full_rows: richest payload for upgraded analytics schemas
+    # 2) analytics_core_rows: reduced, schema-aligned analytics subset
+    # 3) legacy_core_rows: backward-compatible minimal subset
+    return [full_rows, analytics_core_rows, legacy_core_rows]
 
 
 def insert_emissions(rows: List[Dict]):
