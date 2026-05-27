@@ -1,10 +1,11 @@
 from typing import Any, Dict, Mapping, Optional, List, Sequence
 from decimal import Decimal, InvalidOperation
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 import logging
 import re
 import time
 import threading
+import calendar
 from collections import OrderedDict
 
 from supabase import Client
@@ -106,6 +107,33 @@ def _safe_get_int(data: Mapping[str, Any], key: str) -> Optional[int]:
         return int(value)
 
     return None
+
+
+def _derive_reporting_period_bounds(raw_date: object) -> tuple[Optional[str], Optional[str]]:
+    parsed: date | None = None
+    if isinstance(raw_date, datetime):
+        parsed = raw_date.date()
+    elif isinstance(raw_date, date):
+        parsed = raw_date
+    elif isinstance(raw_date, str):
+        text = raw_date.strip()
+        if text:
+            try:
+                if len(text) == 4 and text.isdigit():
+                    parsed = date(int(text), 1, 1)
+                elif len(text) == 7:
+                    parsed = datetime.strptime(text, "%Y-%m").date()
+                else:
+                    parsed = datetime.fromisoformat(text.replace("Z", "+00:00")).date()
+            except ValueError:
+                parsed = None
+
+    if parsed is None:
+        return (None, None)
+
+    start = parsed.replace(day=1)
+    end = parsed.replace(day=calendar.monthrange(parsed.year, parsed.month)[1])
+    return (start.isoformat(), end.isoformat())
 
 
 def _resolve_activity_value(row: Mapping[str, Any], activity_type: str) -> Optional[Decimal]:
@@ -387,12 +415,38 @@ def calculate_emissions_for_row(
         raise EmissionsCalculationError("Invalid factor_value")
 
     emissions_value = value * factor
+    activity_date = (
+        row.get("date")
+        or (inserted_activity.get("activity_date") if isinstance(inserted_activity, Mapping) else None)
+    )
+    reporting_period_start, reporting_period_end = _derive_reporting_period_bounds(activity_date)
+    company_department_id = row.get("company_department_id") or row.get("department_id")
+    company_supplier_id = row.get("company_supplier_id") or row.get("supplier_id")
+    metadata = row.get("metadata")
+    calc_confidence_decimal = _safe_get_decimal(row, "calculation_confidence")
+    calc_confidence = float(calc_confidence_decimal) if calc_confidence_decimal is not None else None
 
     return {
         "activity_id": activity_id,
         "emission_factor_id": factor_row.get("id"),
         "co2e": float(emissions_value),
         "calculated_at": datetime.now(timezone.utc).isoformat(),
+        "reporting_period_start": reporting_period_start,
+        "reporting_period_end": reporting_period_end,
+        "organization_id": (
+            inserted_activity.get("organization_id") if isinstance(inserted_activity, Mapping) else None
+        ),
+        "company_location_id": (
+            inserted_activity.get("company_location_id") if isinstance(inserted_activity, Mapping) else None
+        ),
+        "company_department_id": company_department_id,
+        "company_supplier_id": company_supplier_id,
+        "activity_quantity": float(value),
+        "activity_unit": unit,
+        "verification_status": row.get("verification_status"),
+        "calculation_method": row.get("calculation_method"),
+        "calculation_confidence": calc_confidence,
+        "metadata": metadata if isinstance(metadata, Mapping) else None,
     }
 
 
