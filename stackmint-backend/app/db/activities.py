@@ -7,8 +7,11 @@ import calendar
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
 from postgrest.exceptions import APIError
+import logging
 
 from app.parsing.schemas import SCHEMAS
+
+logger = logging.getLogger(__name__)
 
 
 def _serialize_row(row: Dict) -> Dict:
@@ -185,18 +188,31 @@ def insert_activities(rows: List[Dict]) -> List[Dict[str, Any]]:
         return []
 
     enriched_payload = [_to_activity_insert_row(_serialize_row(row)) for row in rows]
+    # Try full analytics payload first, then fallback to core fields for older schemas.
     payload_candidates = [enriched_payload, [_to_activity_core_insert_row(r) for r in enriched_payload]]
 
     response_data: List[Dict[str, Any]] = []
-    for payload in payload_candidates:
+    for idx, payload in enumerate(payload_candidates, start=1):
         try:
             response = supabase.table("company_activities").insert(payload).execute()
             if isinstance(response.data, list):
                 response_data = [item for item in response.data if isinstance(item, dict)]
                 break
         except APIError:
+            logger.debug(
+                "Insert into company_activities failed for payload candidate %s/%s",
+                idx,
+                len(payload_candidates),
+                exc_info=True,
+            )
             continue
         except Exception:
+            logger.debug(
+                "Unexpected insert error for company_activities payload candidate %s/%s",
+                idx,
+                len(payload_candidates),
+                exc_info=True,
+            )
             continue
 
     inserted_rows: List[Dict[str, Any]] = []

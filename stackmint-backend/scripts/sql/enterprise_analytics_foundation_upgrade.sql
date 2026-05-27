@@ -188,6 +188,7 @@ GROUP BY l.id;
 
 CREATE OR REPLACE VIEW public.v_monthly_emissions_trend AS
 SELECT
+  -- Precedence: activity reporting period > emissions reporting period > calculated timestamp.
   DATE_TRUNC(
     'month',
     COALESCE(

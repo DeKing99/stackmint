@@ -424,7 +424,7 @@ def calculate_emissions_for_row(
     company_supplier_id = row.get("company_supplier_id") or row.get("supplier_id")
     metadata = row.get("metadata")
     calc_confidence_decimal = _safe_get_decimal(row, "calculation_confidence")
-    calc_confidence = float(calc_confidence_decimal) if calc_confidence_decimal is not None else 1.0
+    calc_confidence = float(calc_confidence_decimal) if calc_confidence_decimal is not None else None
 
     return {
         "activity_id": activity_id,
