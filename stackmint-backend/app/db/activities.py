@@ -3,8 +3,10 @@
 from app.db.client import supabase
 from typing import List, Dict, Any
 from datetime import date, datetime
+import calendar
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
+from postgrest.exceptions import APIError
 
 from app.parsing.schemas import SCHEMAS
 
@@ -32,6 +34,48 @@ def _to_float(value: object) -> float | None:
             return float(Decimal(text))
         except (InvalidOperation, ValueError):
             return None
+    return None
+
+
+def _parse_date(value: object) -> date | None:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if not isinstance(value, str):
+        return None
+
+    text = value.strip()
+    if not text:
+        return None
+
+    if len(text) == 4 and text.isdigit():
+        return date(int(text), 1, 1)
+    if len(text) == 7:
+        try:
+            return datetime.strptime(text, "%Y-%m").date()
+        except ValueError:
+            return None
+
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).date()
+    except ValueError:
+        return None
+
+
+def _reporting_period_bounds(value: object) -> tuple[str | None, str | None]:
+    parsed_date = _parse_date(value)
+    if parsed_date is None:
+        return (None, None)
+
+    start = parsed_date.replace(day=1)
+    end = parsed_date.replace(day=calendar.monthrange(parsed_date.year, parsed_date.month)[1])
+    return (start.isoformat(), end.isoformat())
+
+
+def _to_metadata(value: object) -> Dict[str, Any] | None:
+    if isinstance(value, dict):
+        return value
     return None
 
 
@@ -94,16 +138,42 @@ def _to_activity_insert_row(row: Dict) -> Dict:
     else:
         activity_date = str(raw_date) if raw_date is not None else None
 
+    reporting_period_start, reporting_period_end = _reporting_period_bounds(activity_date)
     return {
         "organization_id": _resolve_organization_id(row.get("organization_id")),
         "source_upload_id": row.get("upload_id"),
         "activity_date": activity_date,
+        "reporting_period_start": reporting_period_start,
+        "reporting_period_end": reporting_period_end,
         "activity_type": activity_type,
         "scope": scope,
         "category": category,
+        "company_department_id": row.get("company_department_id") or row.get("department_id"),
+        "company_supplier_id": row.get("company_supplier_id") or row.get("supplier_id"),
         "quantity": _pick_quantity(row, activity_type),
         "unit": row.get("unit"),
         "spend_amount": _to_float(row.get("amount_spent")),
+        "currency": row.get("currency"),
+        "invoice_reference": row.get("invoice_reference"),
+        "verification_status": row.get("verification_status"),
+        "data_quality_score": _to_float(row.get("data_quality_score")),
+        "calculation_method": row.get("calculation_method"),
+        "metadata": _to_metadata(row.get("metadata")),
+        "company_location_id": row.get("company_location_id"),
+    }
+
+
+def _to_activity_core_insert_row(row: Dict) -> Dict:
+    return {
+        "organization_id": row.get("organization_id"),
+        "source_upload_id": row.get("source_upload_id"),
+        "activity_date": row.get("activity_date"),
+        "activity_type": row.get("activity_type"),
+        "scope": row.get("scope"),
+        "category": row.get("category"),
+        "quantity": row.get("quantity"),
+        "unit": row.get("unit"),
+        "spend_amount": row.get("spend_amount"),
         "currency": row.get("currency"),
         "company_location_id": row.get("company_location_id"),
     }
@@ -114,13 +184,23 @@ def insert_activities(rows: List[Dict]) -> List[Dict[str, Any]]:
     if not rows:
         return []
 
-    payload = [_to_activity_insert_row(_serialize_row(row)) for row in rows]
-    response = supabase.table("company_activities").insert(payload).execute()
-    if not isinstance(response.data, list):
-        return []
+    enriched_payload = [_to_activity_insert_row(_serialize_row(row)) for row in rows]
+    payload_candidates = [enriched_payload, [_to_activity_core_insert_row(r) for r in enriched_payload]]
+
+    response_data: List[Dict[str, Any]] = []
+    for payload in payload_candidates:
+        try:
+            response = supabase.table("company_activities").insert(payload).execute()
+            if isinstance(response.data, list):
+                response_data = [item for item in response.data if isinstance(item, dict)]
+                break
+        except APIError:
+            continue
+        except Exception:
+            continue
 
     inserted_rows: List[Dict[str, Any]] = []
-    for item in response.data:
+    for item in response_data:
         if isinstance(item, dict):
             inserted_rows.append(item)
 
