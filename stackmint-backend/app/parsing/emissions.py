@@ -1,4 +1,4 @@
-from typing import Any, Dict, Mapping, Optional, List, Sequence
+from typing import Any, Dict, Mapping, Optional, List, Sequence, Set
 from decimal import Decimal, InvalidOperation
 from datetime import datetime, timezone
 import logging
@@ -221,8 +221,8 @@ def _token_variants(value: Optional[str]) -> set[str]:
     return variants
 
 
-def _collect_row_text_tokens(row: Mapping[str, Any], keys: Sequence[str]) -> set[str]:
-    tokens: set[str] = set()
+def _collect_row_text_tokens(row: Mapping[str, Any], keys: Sequence[str]) -> Set[str]:
+    tokens: Set[str] = set()
     for key in keys:
         value = row.get(key)
         if not isinstance(value, str):

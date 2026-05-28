@@ -3,7 +3,7 @@ import logging
 import os
 import math
 import json
-from typing import Dict, Any, List, cast
+from typing import Dict, Any, List, Optional, cast
 from pathlib import Path
 import re
 from datetime import datetime
@@ -753,7 +753,7 @@ def run_parsing_pipeline(upload: Dict[str, Any]) -> Dict[str, Any]:
 
         resolved_activity_type = _resolve_upload_activity_type(upload, raw_rows)
         logger.info(f"[Pipeline] Resolved activity_type={resolved_activity_type}")
-        manual_factor_activity_type: str | None = None
+        manual_factor_activity_type: Optional[str] = None
         if isinstance(activity_type, str):
             raw_candidate = activity_type.strip()
             normalized_candidate = _normalize_activity_type(raw_candidate)
