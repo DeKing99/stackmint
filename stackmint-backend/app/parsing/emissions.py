@@ -1,4 +1,4 @@
-from typing import Any, Dict, Mapping, Optional, List, Sequence
+from typing import Any, Dict, Mapping, Optional, List, Sequence, Set
 from decimal import Decimal, InvalidOperation
 from datetime import datetime, timezone
 import logging
@@ -13,6 +13,28 @@ from app.core.config import settings
 
 
 logger = logging.getLogger(__name__)
+
+CANONICAL_FACTOR_ACTIVITY_TYPES = {
+    "stationary_combustion_liquid_fuels",
+    "stationary_combustion_gaseous_fuels",
+    "purchased_electricity_uk_grid",
+    "electricity_for_evs",
+    "freight_hgv",
+    "freight_air",
+    "freight_cargo_ship",
+    "business_travel_air",
+    "business_travel_rail",
+    "hotel_stays",
+    "waste_plastic",
+    "waste_construction",
+    "materials_construction",
+    "fugitive_refrigerants_blends",
+    "water_supply",
+    "homeworking_heating",
+    "managed_vehicle_hgv",
+    "well_to_tank_liquid_fuels",
+    "secr_transport",
+}
 
 
 class EmissionsCalculationError(Exception):
@@ -108,6 +130,52 @@ def _safe_get_int(data: Mapping[str, Any], key: str) -> Optional[int]:
     return None
 
 
+def _safe_get_from_optional_mapping(data: Optional[Mapping[str, Any]], key: str) -> Any:
+    if isinstance(data, Mapping):
+        return data.get(key)
+    return None
+
+
+def _first_non_empty(*values: Any) -> Any:
+    for value in values:
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        return value
+    return None
+
+
+def _extract_reporting_parts(
+    row: Mapping[str, Any],
+    inserted_activity: Optional[Mapping[str, Any]],
+) -> tuple[Optional[int], Optional[int], Optional[int], Optional[str]]:
+    reporting_year = _safe_get_int(row, "reporting_year") or _safe_get_int(row, "year")
+    reporting_month = _safe_get_int(row, "reporting_month")
+    reporting_period = _safe_get_str(row, "reporting_period")
+
+    date_like = _first_non_empty(
+        row.get("date"),
+        row.get("activity_date"),
+        _safe_get_from_optional_mapping(inserted_activity, "activity_date"),
+    )
+
+    if isinstance(date_like, str):
+        try:
+            parsed = datetime.fromisoformat(date_like.replace("Z", "+00:00"))
+            reporting_year = reporting_year or parsed.year
+            reporting_month = reporting_month or parsed.month
+            reporting_period = reporting_period or parsed.strftime("%Y-%m")
+        except ValueError:
+            pass
+
+    reporting_quarter = _safe_get_int(row, "reporting_quarter")
+    if reporting_quarter is None and reporting_month is not None and 1 <= reporting_month <= 12:
+        reporting_quarter = ((reporting_month - 1) // 3) + 1
+
+    return reporting_year, reporting_month, reporting_quarter, reporting_period
+
+
 def _resolve_activity_value(row: Mapping[str, Any], activity_type: str) -> Optional[Decimal]:
     # Backward compatibility: honor pre-normalized "value" when present.
     direct_value = _safe_get_decimal(row, "value")
@@ -151,6 +219,130 @@ def _token_variants(value: Optional[str]) -> set[str]:
         if base.startswith(prefix) and len(base) > len(prefix):
             variants.add(base[len(prefix):])
     return variants
+
+
+def _collect_row_text_tokens(row: Mapping[str, Any], keys: Sequence[str]) -> Set[str]:
+    tokens: Set[str] = set()
+    for key in keys:
+        value = row.get(key)
+        if not isinstance(value, str):
+            continue
+        token = _normalize_token(value)
+        if token:
+            tokens.add(token)
+    return tokens
+
+
+def _append_candidate(candidates: List[str], candidate: Optional[str]) -> None:
+    if not isinstance(candidate, str):
+        return
+    normalized = candidate.strip()
+    if not normalized:
+        return
+    if normalized in candidates:
+        return
+    candidates.append(normalized)
+
+
+def _resolve_factor_activity_type_candidates(
+    row: Mapping[str, Any],
+    activity_type: str,
+) -> List[str]:
+    candidates: List[str] = []
+    manual_factor_activity_type = _safe_get_str(row, "factor_activity_type")
+    if manual_factor_activity_type in CANONICAL_FACTOR_ACTIVITY_TYPES:
+        _append_candidate(candidates, manual_factor_activity_type)
+
+    normalized_activity_type = activity_type.strip()
+    if normalized_activity_type in CANONICAL_FACTOR_ACTIVITY_TYPES:
+        _append_candidate(candidates, normalized_activity_type)
+
+    signal_tokens = _collect_row_text_tokens(
+        row,
+        (
+            "activity_type",
+            "travel_mode",
+            "transport_mode",
+            "freight_mode",
+            "commute_mode",
+            "fuel_type",
+            "waste_type",
+            "category",
+            "subcategory",
+            "description",
+            "source_system",
+        ),
+    )
+
+    fuel_token = _normalize_token(_safe_get_str(row, "fuel_type"))
+    if normalized_activity_type == "stationary_combustion":
+        if fuel_token in {"naturalgas", "lpg", "cng", "gaseousfuel", "methane"}:
+            _append_candidate(candidates, "stationary_combustion_gaseous_fuels")
+        if fuel_token in {"diesel", "petrol", "fueloil", "liquidfuel", "heatingoil"}:
+            _append_candidate(candidates, "stationary_combustion_liquid_fuels")
+
+    if normalized_activity_type == "purchased_electricity":
+        if any("ev" in token for token in signal_tokens):
+            _append_candidate(candidates, "electricity_for_evs")
+        _append_candidate(candidates, "purchased_electricity_uk_grid")
+
+    if normalized_activity_type in {"upstream_transport", "downstream_transport"}:
+        mode_token = (
+            _normalize_token(_safe_get_str(row, "transport_mode"))
+            or _normalize_token(_safe_get_str(row, "freight_mode"))
+        )
+        if mode_token in {"hgv", "lorry", "truck"}:
+            _append_candidate(candidates, "freight_hgv")
+        if mode_token in {"air", "plane", "flight", "freightflight"}:
+            _append_candidate(candidates, "freight_air")
+        if mode_token in {"cargo", "cargoship", "ship", "sea", "seafreight", "vessel"}:
+            _append_candidate(candidates, "freight_cargo_ship")
+
+    if normalized_activity_type == "business_travel":
+        travel_mode = _normalize_token(_safe_get_str(row, "travel_mode"))
+        if travel_mode in {"air", "plane", "flight"}:
+            _append_candidate(candidates, "business_travel_air")
+        if travel_mode in {"rail", "train"}:
+            _append_candidate(candidates, "business_travel_rail")
+        if "hotel" in signal_tokens or "stay" in signal_tokens:
+            _append_candidate(candidates, "hotel_stays")
+
+    if normalized_activity_type == "waste_generated":
+        waste_type = _normalize_token(_safe_get_str(row, "waste_type"))
+        if "plastic" in waste_type:
+            _append_candidate(candidates, "waste_plastic")
+        if "construction" in waste_type:
+            _append_candidate(candidates, "waste_construction")
+
+    if normalized_activity_type == "purchased_goods":
+        category_token = _normalize_token(_safe_get_str(row, "category"))
+        if "construction" in category_token:
+            _append_candidate(candidates, "materials_construction")
+
+    if normalized_activity_type == "fugitive_emissions":
+        _append_candidate(candidates, "fugitive_refrigerants_blends")
+
+    if normalized_activity_type == "water_usage":
+        _append_candidate(candidates, "water_supply")
+
+    if normalized_activity_type == "mobile_combustion":
+        vehicle_token = _normalize_token(
+            _safe_get_str(row, "vehicle_id") or _safe_get_str(row, "vehicle_type")
+        )
+        if "hgv" in vehicle_token:
+            _append_candidate(candidates, "managed_vehicle_hgv")
+
+    if any("welltotank" in token or token.startswith("wtt") for token in signal_tokens):
+        _append_candidate(candidates, "well_to_tank_liquid_fuels")
+    if any("secr" in token for token in signal_tokens):
+        _append_candidate(candidates, "secr_transport")
+    if any("homeworking" in token for token in signal_tokens) and any(
+        "heating" in token for token in signal_tokens
+    ):
+        _append_candidate(candidates, "homeworking_heating")
+
+    _append_candidate(candidates, normalized_activity_type)
+    return candidates
 
 
 def _search_tokens(value: Optional[str]) -> List[str]:
@@ -367,14 +559,23 @@ def calculate_emissions_for_row(
             f"Missing required emissions fields: activity_type={activity_type!r} value={value!r}"
         )
 
-    factor_row, attempts_tried = _fetch_emission_factor(
-        supabase=supabase,
-        activity_type=activity_type,
-        unit=unit,
-        region=region,
-        year=year,
-        match_token=match_token,
-    )
+    attempts_tried: List[str] = []
+    factor_row: Optional[Mapping[str, Any]] = None
+    resolved_factor_activity_type = activity_type
+    for candidate_activity_type in _resolve_factor_activity_type_candidates(row, activity_type):
+        candidate_factor_row, candidate_attempts = _fetch_emission_factor(
+            supabase=supabase,
+            activity_type=candidate_activity_type,
+            unit=unit,
+            region=region,
+            year=year,
+            match_token=match_token,
+        )
+        attempts_tried.extend(candidate_attempts)
+        if candidate_factor_row:
+            factor_row = candidate_factor_row
+            resolved_factor_activity_type = candidate_activity_type
+            break
 
     if not factor_row:
         attempts_str = "; ".join(attempts_tried) if attempts_tried else "none"
@@ -387,11 +588,67 @@ def calculate_emissions_for_row(
         raise EmissionsCalculationError("Invalid factor_value")
 
     emissions_value = value * factor
+    emissions_kgco2e = float(emissions_value)
+    emissions_tco2e = emissions_kgco2e / 1000.0
+    reporting_year, reporting_month, reporting_quarter, reporting_period = _extract_reporting_parts(
+        row=row,
+        inserted_activity=inserted_activity,
+    )
+    organization_id = _first_non_empty(
+        row.get("organization_id"),
+        _safe_get_from_optional_mapping(inserted_activity, "organization_id"),
+    )
+    company_location_id = _first_non_empty(
+        row.get("company_location_id"),
+        _safe_get_from_optional_mapping(inserted_activity, "company_location_id"),
+    )
+    scope = _first_non_empty(
+        row.get("scope"),
+        _safe_get_from_optional_mapping(inserted_activity, "scope"),
+        SCHEMAS.get(activity_type, {}).get("scope"),
+    )
+    category = _first_non_empty(
+        row.get("category"),
+        _safe_get_from_optional_mapping(inserted_activity, "category"),
+        SCHEMAS.get(activity_type, {}).get("emissions_category"),
+    )
+    calculation_confidence = _safe_get_decimal(row, "calculation_confidence")
 
     return {
         "activity_id": activity_id,
         "emission_factor_id": factor_row.get("id"),
-        "co2e": float(emissions_value),
+        "co2e": emissions_kgco2e,
+        "organization_id": organization_id,
+        "company_location_id": company_location_id,
+        "department_id": _first_non_empty(
+            row.get("department_id"),
+            _safe_get_from_optional_mapping(inserted_activity, "department_id"),
+        ),
+        "supplier_id": _first_non_empty(
+            row.get("supplier_id"),
+            _safe_get_from_optional_mapping(inserted_activity, "supplier_id"),
+        ),
+        "emission_category_id": _first_non_empty(
+            row.get("emission_category_id"),
+            _safe_get_from_optional_mapping(inserted_activity, "emission_category_id"),
+        ),
+        "scope": scope,
+        "category": category,
+        "reporting_year": reporting_year,
+        "reporting_month": reporting_month,
+        "reporting_quarter": reporting_quarter,
+        "reporting_period": reporting_period,
+        "emissions_kgco2e": emissions_kgco2e,
+        "emissions_tco2e": emissions_tco2e,
+        "activity_quantity": float(value),
+        "activity_unit": unit,
+        "calculation_method": _safe_get_str(row, "calculation_method") or "factor_based",
+        "calculation_confidence": float(calculation_confidence) if calculation_confidence is not None else None,
+        "verification_status": _safe_get_str(row, "verification_status") or "unverified",
+        "source_system": _safe_get_str(row, "source_system") or "stackmint_pipeline",
+        "tags": row.get("tags"),
+        "metadata": row.get("metadata"),
+        "factor_activity_type": resolved_factor_activity_type,
         "calculated_at": datetime.now(timezone.utc).isoformat(),
     }
 

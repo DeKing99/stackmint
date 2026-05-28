@@ -2,10 +2,12 @@ import time
 import logging
 import os
 import math
-from typing import Dict, Any, List, cast
+import json
+from typing import Dict, Any, List, Optional, cast
 from pathlib import Path
 import re
 from datetime import datetime
+from uuid import UUID
 
 from app.parsing.extractors import extract_rows
 from app.parsing.mapping import normalize_columns
@@ -30,6 +32,49 @@ from supabase import create_client
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+CANONICAL_ACTIVITY_TYPE_TO_SCHEMA_ACTIVITY_TYPE: Dict[str, str] = {
+    "stationary_combustion_liquid_fuels": "stationary_combustion",
+    "stationary_combustion_gaseous_fuels": "stationary_combustion",
+    "purchased_electricity_uk_grid": "purchased_electricity",
+    "electricity_for_evs": "purchased_electricity",
+    "freight_hgv": "upstream_transport",
+    "freight_air": "upstream_transport",
+    "freight_cargo_ship": "upstream_transport",
+    "business_travel_air": "business_travel",
+    "business_travel_rail": "business_travel",
+    "hotel_stays": "business_travel",
+    "waste_plastic": "waste_generated",
+    "waste_construction": "waste_generated",
+    "materials_construction": "purchased_goods",
+    "fugitive_refrigerants_blends": "fugitive_emissions",
+    "water_supply": "water_usage",
+    "homeworking_heating": "employee_commuting",
+    "managed_vehicle_hgv": "mobile_combustion",
+    "well_to_tank_liquid_fuels": "stationary_combustion",
+    "secr_transport": "upstream_transport",
+}
+
+ENTERPRISE_ROW_PASSTHROUGH_FIELDS = (
+    "department_id",
+    "supplier_id",
+    "emission_category_id",
+    "source_system",
+    "invoice_number",
+    "reference_code",
+    "description",
+    "notes",
+    "data_quality_score",
+    "verification_status",
+    "calculation_method",
+    "reporting_period",
+    "tags",
+    "metadata",
+    "amount_spent",
+    "currency",
+    "category",
+    "factor_activity_type",
+)
 
 
 class ActivityTypeReviewRequired(Exception):
@@ -101,6 +146,54 @@ def _safe_float(value: Any) -> float | None:
         return float(str(value).strip())
     except Exception:
         return None
+
+
+def _normalize_activity_type(candidate: str) -> str:
+    if candidate in SCHEMAS:
+        return candidate
+    return CANONICAL_ACTIVITY_TYPE_TO_SCHEMA_ACTIVITY_TYPE.get(candidate, candidate)
+
+
+def _is_uuid_like(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    text = value.strip()
+    if not text:
+        return False
+    try:
+        UUID(text)
+        return True
+    except ValueError:
+        return False
+
+
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            return {}
+    return {}
+
+
+def _get_upload_enterprise_inputs(upload: Dict[str, Any]) -> Dict[str, Any]:
+    # Preferred source: parsing_stage_summary.enterprise_inputs from the upload form.
+    stage_summary = _safe_dict(upload.get("parsing_stage_summary"))
+    enterprise_inputs = _safe_dict(stage_summary.get("enterprise_inputs"))
+    if enterprise_inputs:
+        return enterprise_inputs
+
+    # Fallback source: upload metadata payload.
+    metadata = _safe_dict(upload.get("metadata"))
+    fallback_inputs = _safe_dict(metadata.get("enterprise_inputs"))
+    if fallback_inputs:
+        return fallback_inputs
+
+    return {}
 
 
 def _preclean_row(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -426,6 +519,78 @@ def _apply_required_field_fallbacks(
     return mapped_row
 
 
+def _apply_enterprise_upload_fallbacks(
+    mapped_row: Dict[str, Any],
+    upload: Dict[str, Any],
+) -> Dict[str, Any]:
+    enterprise_inputs = _get_upload_enterprise_inputs(upload)
+    if not enterprise_inputs:
+        return mapped_row
+
+    if _is_empty_cell(mapped_row.get("reporting_period")):
+        reporting_period = enterprise_inputs.get("reporting_period")
+        if isinstance(reporting_period, str) and reporting_period.strip():
+            mapped_row["reporting_period"] = reporting_period.strip()
+
+    if _is_empty_cell(mapped_row.get("invoice_number")):
+        invoice_number = enterprise_inputs.get("invoice_number")
+        if isinstance(invoice_number, str) and invoice_number.strip():
+            mapped_row["invoice_number"] = invoice_number.strip()
+
+    if _is_empty_cell(mapped_row.get("amount_spent")):
+        spend_amount = _safe_float(enterprise_inputs.get("spend_amount"))
+        if spend_amount is not None:
+            mapped_row["amount_spent"] = spend_amount
+
+    if _is_empty_cell(mapped_row.get("category")):
+        category = enterprise_inputs.get("category")
+        if isinstance(category, str) and category.strip():
+            mapped_row["category"] = category.strip()
+
+    supplier_value = enterprise_inputs.get("supplier")
+    if _is_empty_cell(mapped_row.get("supplier_id")) and _is_uuid_like(supplier_value):
+        mapped_row["supplier_id"] = str(supplier_value).strip()
+
+    department_value = enterprise_inputs.get("department")
+    if _is_empty_cell(mapped_row.get("department_id")) and _is_uuid_like(department_value):
+        mapped_row["department_id"] = str(department_value).strip()
+
+    current_metadata = mapped_row.get("metadata")
+    merged_metadata: Dict[str, Any] = {}
+    if isinstance(current_metadata, dict):
+        merged_metadata.update(current_metadata)
+
+    if isinstance(supplier_value, str) and supplier_value.strip() and not _is_uuid_like(supplier_value):
+        merged_metadata["supplier_name"] = supplier_value.strip()
+    if isinstance(department_value, str) and department_value.strip() and not _is_uuid_like(department_value):
+        merged_metadata["department_name"] = department_value.strip()
+    if merged_metadata:
+        mapped_row["metadata"] = merged_metadata
+
+    if _is_empty_cell(mapped_row.get("source_system")):
+        mapped_row["source_system"] = "stackmint_upload"
+
+    return mapped_row
+
+
+def _propagate_enterprise_fields(
+    validated_row: Dict[str, Any],
+    mapped_row: Dict[str, Any],
+) -> Dict[str, Any]:
+    for field_name in ENTERPRISE_ROW_PASSTHROUGH_FIELDS:
+        value = mapped_row.get(field_name)
+        if _is_empty_cell(value):
+            continue
+        validated_row[field_name] = value
+
+    if _is_empty_cell(validated_row.get("amount_spent")):
+        spend_amount = _safe_float(mapped_row.get("spend_amount"))
+        if spend_amount is not None:
+            validated_row["amount_spent"] = spend_amount
+
+    return validated_row
+
+
 def _resolve_upload_activity_type(
     upload: Dict[str, Any],
     raw_rows: List[Dict[str, Any]],
@@ -434,12 +599,13 @@ def _resolve_upload_activity_type(
     raw_activity_type = upload.get("activity_type")
     if isinstance(raw_activity_type, str):
         candidate = raw_activity_type.strip()
-        if candidate in SCHEMAS:
+        normalized_candidate = _normalize_activity_type(candidate)
+        if normalized_candidate in SCHEMAS:
             # Guard against stale/manual type mismatches on messy real-world files.
             inference_for_conflict = infer_activity_type(upload, raw_rows)
             if (
                 inference_for_conflict.activity_type
-                and inference_for_conflict.activity_type != candidate
+                and inference_for_conflict.activity_type != normalized_candidate
                 and (
                     inference_for_conflict.confidence >= 0.65
                     or inference_for_conflict.score >= 8.0
@@ -464,9 +630,16 @@ def _resolve_upload_activity_type(
                 save_upload_inference_audit(
                     upload_id,
                     activity_type_review_status="manual_override",
-                    activity_type_review_reason="Activity type supplied explicitly by user or reviewer.",
+                    activity_type_review_reason=(
+                        "Activity type supplied explicitly by user or reviewer."
+                        if candidate == normalized_candidate
+                        else (
+                            "Canonical activity type supplied by user/reviewer and "
+                            f"mapped to schema type {normalized_candidate}."
+                        )
+                    ),
                 )
-            return candidate
+            return normalized_candidate
 
     inference = infer_activity_type(upload, raw_rows)
     if isinstance(upload_id, str) and upload_id:
@@ -558,13 +731,19 @@ def run_parsing_pipeline(upload: Dict[str, Any]) -> Dict[str, Any]:
         # 1️⃣ Extract rows
         # -----------------------------------------
 
+        normalized_activity_type = (
+            _normalize_activity_type(activity_type.strip())
+            if isinstance(activity_type, str)
+            else None
+        )
+
         if local_file_path.lower().endswith(".pdf"):
-            if not isinstance(activity_type, str) or activity_type not in SCHEMAS:
+            if not isinstance(normalized_activity_type, str) or normalized_activity_type not in SCHEMAS:
                 raise ValidationError(
                     "PDF uploads currently require a manual or pre-inferred activity type"
                 )
-            logger.info(f"[Pipeline] Extracting from PDF with activity_type={activity_type}")
-            raw_rows = extract_pdf_with_ai(local_file_path, activity_type)
+            logger.info(f"[Pipeline] Extracting from PDF with activity_type={normalized_activity_type}")
+            raw_rows = extract_pdf_with_ai(local_file_path, normalized_activity_type)
         else:
             logger.info("[Pipeline] Extracting rows from file")
             raw_rows = extract_rows(working_upload)
@@ -574,6 +753,16 @@ def run_parsing_pipeline(upload: Dict[str, Any]) -> Dict[str, Any]:
 
         resolved_activity_type = _resolve_upload_activity_type(upload, raw_rows)
         logger.info(f"[Pipeline] Resolved activity_type={resolved_activity_type}")
+        manual_factor_activity_type: Optional[str] = None
+        if isinstance(activity_type, str):
+            raw_candidate = activity_type.strip()
+            normalized_candidate = _normalize_activity_type(raw_candidate)
+            if (
+                raw_candidate
+                and raw_candidate != normalized_candidate
+                and normalized_candidate == resolved_activity_type
+            ):
+                manual_factor_activity_type = raw_candidate
 
         # -----------------------------------------
         # 2️⃣ Load company mappings
@@ -630,6 +819,12 @@ def run_parsing_pipeline(upload: Dict[str, Any]) -> Dict[str, Any]:
                     upload,
                     resolved_activity_type,
                 )
+                mapped_row = _apply_enterprise_upload_fallbacks(
+                    mapped_row,
+                    upload,
+                )
+                if manual_factor_activity_type and _is_empty_cell(mapped_row.get("factor_activity_type")):
+                    mapped_row["factor_activity_type"] = manual_factor_activity_type
 
                 mapped_row = _apply_carry_forward_fallbacks(
                     mapped_row,
@@ -653,6 +848,7 @@ def run_parsing_pipeline(upload: Dict[str, Any]) -> Dict[str, Any]:
                     mapped_row,
                     resolved_activity_type
                 )
+                validated_row = _propagate_enterprise_fields(validated_row, mapped_row)
 
                 # Keep activity type on each row so emissions lookup can match factors.
                 validated_row["activity_type"] = resolved_activity_type

@@ -15,8 +15,6 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { DataTableDemo } from "../../../../../../components/file-table";
-import { Calendar23 } from "@/components/calendar-23";
-import { type DateRange } from "react-day-picker";
 import { v4 as uuidv4 } from "uuid";
 import { useParams } from "next/navigation";
 import { createClerkSupabaseClient } from "@/lib/supabase-client";
@@ -48,8 +46,15 @@ export default function FileUploader() {
   const [uploadStatus, setUploadStatus] = useState<
     "idle" | "success" | "error"
   >("idle");
-  const [range, setRange] = useState<DateRange | undefined>();
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [enterpriseInputs, setEnterpriseInputs] = useState({
+    reportingPeriod: "",
+    supplier: "",
+    department: "",
+    spendAmount: "",
+    invoiceNumber: "",
+    category: "",
+  });
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: (acceptedFiles) => {
@@ -57,6 +62,14 @@ export default function FileUploader() {
       if (!file) return;
       setActivityType("");
       setShowAdvanced(false);
+      setEnterpriseInputs({
+        reportingPeriod: "",
+        supplier: "",
+        department: "",
+        spendAmount: "",
+        invoiceNumber: "",
+        category: "",
+      });
       setSelectedFile(file);
       setModalOpen(true);
     },
@@ -132,7 +145,20 @@ export default function FileUploader() {
       locationId || "unknown"
     }/${uniqueFileName}`;
 
-    let row_id;
+    const parsedSpendAmount = Number.parseFloat(enterpriseInputs.spendAmount);
+    const uploadEnterpriseInputs = {
+      reporting_period: enterpriseInputs.reportingPeriod.trim() || undefined,
+      supplier: enterpriseInputs.supplier.trim() || undefined,
+      department: enterpriseInputs.department.trim() || undefined,
+      spend_amount: Number.isFinite(parsedSpendAmount)
+        ? parsedSpendAmount
+        : undefined,
+      invoice_number: enterpriseInputs.invoiceNumber.trim() || undefined,
+      category: enterpriseInputs.category.trim() || undefined,
+    };
+    const hasEnterpriseInputs = Object.values(uploadEnterpriseInputs).some(
+      (v) => v !== undefined,
+    );
 
     const metadata = {
       file_name: safeName,
@@ -151,6 +177,13 @@ export default function FileUploader() {
       parsing_status: "pending",
       // i need this so i know where each file comes from etc.
       company_location_id: locationId,
+      ...(hasEnterpriseInputs
+        ? {
+            parsing_stage_summary: {
+              enterprise_inputs: uploadEnterpriseInputs,
+            },
+          }
+        : {}),
     };
 
     const { error } = await supabase.storage
@@ -238,6 +271,14 @@ export default function FileUploader() {
             if (!open) {
               setShowAdvanced(false);
               setActivityType("");
+              setEnterpriseInputs({
+                reportingPeriod: "",
+                supplier: "",
+                department: "",
+                spendAmount: "",
+                invoiceNumber: "",
+                category: "",
+              });
             }
           }}
         >
@@ -317,6 +358,115 @@ export default function FileUploader() {
                         : "Leave this blank unless you need to force a specific classification before parsing starts."}
                     </p>
                   </label>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="text-sm font-medium text-slate-900">
+                        Reporting period
+                      </span>
+                      <input
+                        type="text"
+                        value={enterpriseInputs.reportingPeriod}
+                        onChange={(e) =>
+                          setEnterpriseInputs((prev) => ({
+                            ...prev,
+                            reportingPeriod: e.target.value,
+                          }))
+                        }
+                        placeholder="e.g. 2026-05"
+                        className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm shadow-sm outline-none transition focus:border-sky-400"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-sm font-medium text-slate-900">
+                        Supplier
+                      </span>
+                      <input
+                        type="text"
+                        value={enterpriseInputs.supplier}
+                        onChange={(e) =>
+                          setEnterpriseInputs((prev) => ({
+                            ...prev,
+                            supplier: e.target.value,
+                          }))
+                        }
+                        placeholder="Supplier name or UUID"
+                        className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm shadow-sm outline-none transition focus:border-sky-400"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-sm font-medium text-slate-900">
+                        Department
+                      </span>
+                      <input
+                        type="text"
+                        value={enterpriseInputs.department}
+                        onChange={(e) =>
+                          setEnterpriseInputs((prev) => ({
+                            ...prev,
+                            department: e.target.value,
+                          }))
+                        }
+                        placeholder="Department name or UUID"
+                        className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm shadow-sm outline-none transition focus:border-sky-400"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-sm font-medium text-slate-900">
+                        Spend amount
+                      </span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={enterpriseInputs.spendAmount}
+                        onChange={(e) =>
+                          setEnterpriseInputs((prev) => ({
+                            ...prev,
+                            spendAmount: e.target.value,
+                          }))
+                        }
+                        placeholder="e.g. 1250.50"
+                        className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm shadow-sm outline-none transition focus:border-sky-400"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-sm font-medium text-slate-900">
+                        Invoice / document
+                      </span>
+                      <input
+                        type="text"
+                        value={enterpriseInputs.invoiceNumber}
+                        onChange={(e) =>
+                          setEnterpriseInputs((prev) => ({
+                            ...prev,
+                            invoiceNumber: e.target.value,
+                          }))
+                        }
+                        placeholder="Invoice number or doc reference"
+                        className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm shadow-sm outline-none transition focus:border-sky-400"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-sm font-medium text-slate-900">
+                        Category
+                      </span>
+                      <input
+                        type="text"
+                        value={enterpriseInputs.category}
+                        onChange={(e) =>
+                          setEnterpriseInputs((prev) => ({
+                            ...prev,
+                            category: e.target.value,
+                          }))
+                        }
+                        placeholder="e.g. materials_construction"
+                        className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm shadow-sm outline-none transition focus:border-sky-400"
+                      />
+                    </label>
+                  </div>
+                  <p className="mt-3 text-xs text-slate-500">
+                    Optional fields. Leave blank to let the parser infer values
+                    from file content and document metadata.
+                  </p>
                 </div>
               ) : null}
             </div>
@@ -388,7 +538,7 @@ export default function FileUploader() {
           {/* Replace "your_table_name" with your actual Supabase table name */}
           <DataTableDemo
             key={refreshTrigger}
-            organizationId={organization?.id!}
+            organizationId={organization?.id ?? ""}
             locationId={locationId}
           />
         </div>
