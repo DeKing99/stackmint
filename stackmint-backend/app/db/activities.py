@@ -94,6 +94,10 @@ def _to_activity_insert_row(row: Dict) -> Dict:
     else:
         activity_date = str(raw_date) if raw_date is not None else None
 
+    spend_amount = _to_float(row.get("amount_spent"))
+    if spend_amount is None:
+        spend_amount = _to_float(row.get("spend_amount"))
+
     return {
         "organization_id": _resolve_organization_id(row.get("organization_id")),
         "source_upload_id": row.get("upload_id"),
@@ -103,7 +107,7 @@ def _to_activity_insert_row(row: Dict) -> Dict:
         "category": category,
         "quantity": _pick_quantity(row, activity_type),
         "unit": row.get("unit"),
-        "spend_amount": _to_float(row.get("amount_spent")),
+        "spend_amount": spend_amount,
         "currency": row.get("currency"),
         "company_location_id": row.get("company_location_id"),
         "department_id": row.get("department_id"),

@@ -14,6 +14,28 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+CANONICAL_FACTOR_ACTIVITY_TYPES = {
+    "stationary_combustion_liquid_fuels",
+    "stationary_combustion_gaseous_fuels",
+    "purchased_electricity_uk_grid",
+    "electricity_for_evs",
+    "freight_hgv",
+    "freight_air",
+    "freight_cargo_ship",
+    "business_travel_air",
+    "business_travel_rail",
+    "hotel_stays",
+    "waste_plastic",
+    "waste_construction",
+    "materials_construction",
+    "fugitive_refrigerants_blends",
+    "water_supply",
+    "homeworking_heating",
+    "managed_vehicle_hgv",
+    "well_to_tank_liquid_fuels",
+    "secr_transport",
+}
+
 
 class EmissionsCalculationError(Exception):
     pass
@@ -197,6 +219,130 @@ def _token_variants(value: Optional[str]) -> set[str]:
         if base.startswith(prefix) and len(base) > len(prefix):
             variants.add(base[len(prefix):])
     return variants
+
+
+def _collect_row_text_tokens(row: Mapping[str, Any], keys: Sequence[str]) -> set[str]:
+    tokens: set[str] = set()
+    for key in keys:
+        value = row.get(key)
+        if not isinstance(value, str):
+            continue
+        token = _normalize_token(value)
+        if token:
+            tokens.add(token)
+    return tokens
+
+
+def _append_candidate(candidates: List[str], candidate: Optional[str]) -> None:
+    if not isinstance(candidate, str):
+        return
+    normalized = candidate.strip()
+    if not normalized:
+        return
+    if normalized in candidates:
+        return
+    candidates.append(normalized)
+
+
+def _resolve_factor_activity_type_candidates(
+    row: Mapping[str, Any],
+    activity_type: str,
+) -> List[str]:
+    candidates: List[str] = []
+    manual_factor_activity_type = _safe_get_str(row, "factor_activity_type")
+    if manual_factor_activity_type in CANONICAL_FACTOR_ACTIVITY_TYPES:
+        _append_candidate(candidates, manual_factor_activity_type)
+
+    normalized_activity_type = activity_type.strip()
+    if normalized_activity_type in CANONICAL_FACTOR_ACTIVITY_TYPES:
+        _append_candidate(candidates, normalized_activity_type)
+
+    signal_tokens = _collect_row_text_tokens(
+        row,
+        (
+            "activity_type",
+            "travel_mode",
+            "transport_mode",
+            "freight_mode",
+            "commute_mode",
+            "fuel_type",
+            "waste_type",
+            "category",
+            "subcategory",
+            "description",
+            "source_system",
+        ),
+    )
+
+    fuel_token = _normalize_token(_safe_get_str(row, "fuel_type"))
+    if normalized_activity_type == "stationary_combustion":
+        if fuel_token in {"naturalgas", "lpg", "cng", "gaseousfuel", "methane"}:
+            _append_candidate(candidates, "stationary_combustion_gaseous_fuels")
+        if fuel_token in {"diesel", "petrol", "fueloil", "liquidfuel", "heatingoil"}:
+            _append_candidate(candidates, "stationary_combustion_liquid_fuels")
+
+    if normalized_activity_type == "purchased_electricity":
+        if any("ev" in token for token in signal_tokens):
+            _append_candidate(candidates, "electricity_for_evs")
+        _append_candidate(candidates, "purchased_electricity_uk_grid")
+
+    if normalized_activity_type in {"upstream_transport", "downstream_transport"}:
+        mode_token = (
+            _normalize_token(_safe_get_str(row, "transport_mode"))
+            or _normalize_token(_safe_get_str(row, "freight_mode"))
+        )
+        if mode_token in {"hgv", "lorry", "truck"}:
+            _append_candidate(candidates, "freight_hgv")
+        if mode_token in {"air", "plane", "flight", "freightflight"}:
+            _append_candidate(candidates, "freight_air")
+        if mode_token in {"cargo", "cargoship", "ship", "sea", "seafreight", "vessel"}:
+            _append_candidate(candidates, "freight_cargo_ship")
+
+    if normalized_activity_type == "business_travel":
+        travel_mode = _normalize_token(_safe_get_str(row, "travel_mode"))
+        if travel_mode in {"air", "plane", "flight"}:
+            _append_candidate(candidates, "business_travel_air")
+        if travel_mode in {"rail", "train"}:
+            _append_candidate(candidates, "business_travel_rail")
+        if "hotel" in signal_tokens or "stay" in signal_tokens:
+            _append_candidate(candidates, "hotel_stays")
+
+    if normalized_activity_type == "waste_generated":
+        waste_type = _normalize_token(_safe_get_str(row, "waste_type"))
+        if "plastic" in waste_type:
+            _append_candidate(candidates, "waste_plastic")
+        if "construction" in waste_type:
+            _append_candidate(candidates, "waste_construction")
+
+    if normalized_activity_type == "purchased_goods":
+        category_token = _normalize_token(_safe_get_str(row, "category"))
+        if "construction" in category_token:
+            _append_candidate(candidates, "materials_construction")
+
+    if normalized_activity_type == "fugitive_emissions":
+        _append_candidate(candidates, "fugitive_refrigerants_blends")
+
+    if normalized_activity_type == "water_usage":
+        _append_candidate(candidates, "water_supply")
+
+    if normalized_activity_type == "mobile_combustion":
+        vehicle_token = _normalize_token(
+            _safe_get_str(row, "vehicle_id") or _safe_get_str(row, "vehicle_type")
+        )
+        if "hgv" in vehicle_token:
+            _append_candidate(candidates, "managed_vehicle_hgv")
+
+    if any("welltotank" in token or token.startswith("wtt") for token in signal_tokens):
+        _append_candidate(candidates, "well_to_tank_liquid_fuels")
+    if any("secr" in token for token in signal_tokens):
+        _append_candidate(candidates, "secr_transport")
+    if any("homeworking" in token for token in signal_tokens) and any(
+        "heating" in token for token in signal_tokens
+    ):
+        _append_candidate(candidates, "homeworking_heating")
+
+    _append_candidate(candidates, normalized_activity_type)
+    return candidates
 
 
 def _search_tokens(value: Optional[str]) -> List[str]:
@@ -413,14 +559,23 @@ def calculate_emissions_for_row(
             f"Missing required emissions fields: activity_type={activity_type!r} value={value!r}"
         )
 
-    factor_row, attempts_tried = _fetch_emission_factor(
-        supabase=supabase,
-        activity_type=activity_type,
-        unit=unit,
-        region=region,
-        year=year,
-        match_token=match_token,
-    )
+    attempts_tried: List[str] = []
+    factor_row: Optional[Mapping[str, Any]] = None
+    resolved_factor_activity_type = activity_type
+    for candidate_activity_type in _resolve_factor_activity_type_candidates(row, activity_type):
+        candidate_factor_row, candidate_attempts = _fetch_emission_factor(
+            supabase=supabase,
+            activity_type=candidate_activity_type,
+            unit=unit,
+            region=region,
+            year=year,
+            match_token=match_token,
+        )
+        attempts_tried.extend(candidate_attempts)
+        if candidate_factor_row:
+            factor_row = candidate_factor_row
+            resolved_factor_activity_type = candidate_activity_type
+            break
 
     if not factor_row:
         attempts_str = "; ".join(attempts_tried) if attempts_tried else "none"
@@ -493,6 +648,7 @@ def calculate_emissions_for_row(
         "source_system": _safe_get_str(row, "source_system") or "stackmint_pipeline",
         "tags": row.get("tags"),
         "metadata": row.get("metadata"),
+        "factor_activity_type": resolved_factor_activity_type,
         "calculated_at": datetime.now(timezone.utc).isoformat(),
     }
 
