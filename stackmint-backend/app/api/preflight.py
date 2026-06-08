@@ -20,6 +20,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.db.client import supabase
+from app.db.uploads import update_upload_fields
 from app.parsing.activity_type_inference import infer_activity_type
 from app.parsing.extractors import extract_rows
 from app.parsing.mapping import normalize_columns
@@ -39,6 +40,17 @@ router = APIRouter(prefix="/pipeline", tags=["pipeline"])
 class PreflightRequest(BaseModel):
     upload_id: str
     activity_type_override: Optional[str] = None
+
+
+class UpdateUploadStateRequest(BaseModel):
+    upload_id: str
+    activity_type: Optional[str] = None
+    parsing_status: Optional[str] = None
+    error_message: Optional[str] = None
+    inferred_activity_type: Optional[str] = None
+    inference_confidence: Optional[float] = None
+    activity_type_review_status: Optional[str] = None
+    activity_type_review_reason: Optional[str] = None
 
 
 class FieldPresence(BaseModel):
@@ -282,3 +294,29 @@ async def preflight_upload(request: PreflightRequest) -> PreflightResponse:
         verdict=verdict,
         verdict_detail=verdict_detail,
     )
+
+
+@router.post("/update-upload-state")
+async def update_upload_state(request: UpdateUploadStateRequest) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {}
+
+    if request.activity_type is not None:
+        payload["activity_type"] = request.activity_type
+    if request.parsing_status is not None:
+        payload["parsing_status"] = request.parsing_status
+    if request.error_message is not None:
+        payload["error_message"] = request.error_message
+    if request.inferred_activity_type is not None:
+        payload["inferred_activity_type"] = request.inferred_activity_type
+    if request.inference_confidence is not None:
+        payload["inference_confidence"] = request.inference_confidence
+    if request.activity_type_review_status is not None:
+        payload["activity_type_review_status"] = request.activity_type_review_status
+    if request.activity_type_review_reason is not None:
+        payload["activity_type_review_reason"] = request.activity_type_review_reason
+
+    if not payload:
+        raise HTTPException(status_code=400, detail="No upload fields supplied")
+
+    update_upload_fields(request.upload_id, payload)
+    return {"ok": True, "upload_id": request.upload_id, "updated_fields": list(payload.keys())}

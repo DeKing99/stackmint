@@ -20,7 +20,7 @@ class Settings(BaseSettings):
         )
     )
     CLERK_SECRET_KEY: str
-    INGEST_WORKER_CONCURRENCY: int = 2
+    INGEST_WORKER_CONCURRENCY: int = 1
     INGEST_POLL_INTERVAL_SECONDS: float = 2.0
     EMISSION_FACTOR_CACHE_SIZE: int = 2048
     EMISSION_FACTOR_CACHE_TTL_SECONDS: int = 300

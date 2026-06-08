@@ -596,11 +596,24 @@ def _resolve_upload_activity_type(
     raw_rows: List[Dict[str, Any]],
 ) -> str:
     upload_id = upload.get("id")
+    review_status = upload.get("activity_type_review_status")
     raw_activity_type = upload.get("activity_type")
     if isinstance(raw_activity_type, str):
         candidate = raw_activity_type.strip()
         normalized_candidate = _normalize_activity_type(candidate)
         if normalized_candidate in SCHEMAS:
+            # Respect explicit human review outcomes as the source of truth.
+            if review_status in {"manual_override", "approved"}:
+                if isinstance(upload_id, str) and upload_id:
+                    save_upload_inference_audit(
+                        upload_id,
+                        activity_type_review_status=str(review_status),
+                        activity_type_review_reason=(
+                            "Activity type locked by human review."
+                        ),
+                    )
+                return normalized_candidate
+
             # Guard against stale/manual type mismatches on messy real-world files.
             inference_for_conflict = infer_activity_type(upload, raw_rows)
             if (

@@ -9,6 +9,12 @@ from app.parsing.pipeline import run_parsing_pipeline
 
 
 logger = logging.getLogger(__name__)
+MAX_TRANSIENT_BACKOFF_SECONDS = 30.0
+
+
+def _next_backoff_seconds(base_interval_seconds: float, transient_failures: int) -> float:
+    backoff_multiplier = min(2 ** max(transient_failures - 1, 0), 16)
+    return min(base_interval_seconds * backoff_multiplier, MAX_TRANSIENT_BACKOFF_SECONDS)
 
 
 def start_polling(interval_seconds=5):
@@ -46,12 +52,17 @@ async def polling_worker(interval_seconds: int = 5):
 
 
 async def _worker_loop(worker_id: int, interval_seconds: float) -> None:
+    transient_failures = 0
+
     while True:
+        delay_seconds = interval_seconds
+
         try:
             upload = await asyncio.to_thread(get_pending_upload)
 
             if not upload:
-                await asyncio.sleep(interval_seconds)
+                transient_failures = 0
+                await asyncio.sleep(delay_seconds)
                 continue
 
             upload_id = upload["id"]
@@ -65,22 +76,30 @@ async def _worker_loop(worker_id: int, interval_seconds: float) -> None:
             )
             result = await asyncio.to_thread(run_parsing_pipeline, upload)
             logger.info("[Polling/%s] Processed upload %s: %s", worker_id, upload_id, result)
+            transient_failures = 0
         except httpx.RemoteProtocolError as e:
+            transient_failures += 1
+            delay_seconds = _next_backoff_seconds(interval_seconds, transient_failures)
             logger.warning(
-                "[Polling/%s] Transient transport disconnect while polling: %s. Retrying...",
+                "[Polling/%s] Transient transport disconnect while polling: %s. Retrying in %.1fs...",
                 worker_id,
                 str(e),
+                delay_seconds,
             )
         except httpx.HTTPError as e:
+            transient_failures += 1
+            delay_seconds = _next_backoff_seconds(interval_seconds, transient_failures)
             logger.warning(
-                "[Polling/%s] Transient HTTP error while polling: %s. Retrying...",
+                "[Polling/%s] Transient HTTP error while polling: %s. Retrying in %.1fs...",
                 worker_id,
                 str(e),
+                delay_seconds,
             )
         except Exception as e:
             logger.exception("[Polling/%s] Worker iteration failed: %s", worker_id, str(e))
+            transient_failures = 0
 
-        await asyncio.sleep(interval_seconds)
+        await asyncio.sleep(delay_seconds)
 
 
 async def start_worker_pool(concurrency: int = 2, interval_seconds: float = 2.0):

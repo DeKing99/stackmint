@@ -169,11 +169,60 @@ def _extract_reporting_parts(
         except ValueError:
             pass
 
+    # Inherit enterprise period set during activity insert when row-level period is absent.
+    if not reporting_period:
+        reporting_period = _safe_get_str(inserted_activity or {}, "reporting_period")
+
     reporting_quarter = _safe_get_int(row, "reporting_quarter")
     if reporting_quarter is None and reporting_month is not None and 1 <= reporting_month <= 12:
         reporting_quarter = ((reporting_month - 1) // 3) + 1
 
     return reporting_year, reporting_month, reporting_quarter, reporting_period
+
+
+def _normalize_scope_to_int(value: Any) -> Optional[int]:
+    if isinstance(value, int):
+        return value
+
+    if not isinstance(value, str):
+        return None
+
+    token = value.strip().lower()
+    mapping = {
+        "scope_1": 1,
+        "scope_2": 2,
+        "scope_3": 3,
+        "scope1": 1,
+        "scope2": 2,
+        "scope3": 3,
+        "scope 1": 1,
+        "scope 2": 2,
+        "scope 3": 3,
+        "1": 1,
+        "2": 2,
+        "3": 3,
+    }
+    return mapping.get(token)
+
+
+def _normalize_activity_date_value(value: Any) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+
+    text = value.strip()
+    if not text:
+        return None
+
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%d-%m-%Y", "%m-%d-%Y", "%m/%d/%Y", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(text, fmt).date().isoformat()
+        except ValueError:
+            continue
+
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).date().isoformat()
+    except ValueError:
+        return None
 
 
 def _resolve_activity_value(row: Mapping[str, Any], activity_type: str) -> Optional[Decimal]:
@@ -602,17 +651,38 @@ def calculate_emissions_for_row(
         row.get("company_location_id"),
         _safe_get_from_optional_mapping(inserted_activity, "company_location_id"),
     )
-    scope = _first_non_empty(
+    scope_text = _first_non_empty(
         row.get("scope"),
         _safe_get_from_optional_mapping(inserted_activity, "scope"),
         SCHEMAS.get(activity_type, {}).get("scope"),
     )
+    scope = _normalize_scope_to_int(scope_text)
     category = _first_non_empty(
         row.get("category"),
         _safe_get_from_optional_mapping(inserted_activity, "category"),
         SCHEMAS.get(activity_type, {}).get("emissions_category"),
     )
+    activity_date = _first_non_empty(
+        row.get("activity_date"),
+        row.get("date"),
+        _safe_get_from_optional_mapping(inserted_activity, "activity_date"),
+    )
+    normalized_activity_date = _normalize_activity_date_value(activity_date)
+    activity_type_value = _first_non_empty(
+        row.get("activity_type"),
+        _safe_get_from_optional_mapping(inserted_activity, "activity_type"),
+        activity_type,
+    )
+    subcategory = _first_non_empty(
+        row.get("subcategory"),
+        _safe_get_from_optional_mapping(inserted_activity, "subcategory"),
+    )
     calculation_confidence = _safe_get_decimal(row, "calculation_confidence")
+    metadata = row.get("metadata")
+    if not isinstance(metadata, Mapping):
+        metadata = {}
+    metadata_with_factor = dict(metadata)
+    metadata_with_factor.setdefault("factor_activity_type", resolved_factor_activity_type)
 
     return {
         "activity_id": activity_id,
@@ -633,7 +703,11 @@ def calculate_emissions_for_row(
             _safe_get_from_optional_mapping(inserted_activity, "emission_category_id"),
         ),
         "scope": scope,
+        "activity_type": activity_type_value,
         "category": category,
+        "subcategory": subcategory,
+        "activity_value": float(value),
+        "activity_date": normalized_activity_date,
         "reporting_year": reporting_year,
         "reporting_month": reporting_month,
         "reporting_quarter": reporting_quarter,
@@ -647,8 +721,7 @@ def calculate_emissions_for_row(
         "verification_status": _safe_get_str(row, "verification_status") or "unverified",
         "source_system": _safe_get_str(row, "source_system") or "stackmint_pipeline",
         "tags": row.get("tags"),
-        "metadata": row.get("metadata"),
-        "factor_activity_type": resolved_factor_activity_type,
+        "metadata": metadata_with_factor,
         "calculated_at": datetime.now(timezone.utc).isoformat(),
     }
 

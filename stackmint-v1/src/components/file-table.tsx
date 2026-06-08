@@ -61,6 +61,26 @@ import {
 import { toast } from "sonner";
 import { activityTypes } from "@/lib/activity_types_schema";
 
+async function updateUploadState(
+  uploadId: string,
+  payload: Record<string, unknown>,
+) {
+  const response = await fetch("/api/pipeline/update-upload-state", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ upload_id: uploadId, ...payload }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || "Could not update upload state.");
+  }
+
+  return response.json();
+}
+
 export type UploadedFile = {
   id: string;
   file_name: string;
@@ -121,6 +141,11 @@ function isPendingReview(file: UploadedFile): boolean {
     file.activity_type_review_status === "pending_review" ||
     file.parsing_status === "pending_review"
   );
+}
+
+function isInFlight(file: UploadedFile): boolean {
+  const status = file.parsing_status?.toLowerCase();
+  return status === "pending" || status === "processing" || status === "queued";
 }
 
 function getReviewBadgeVariant(
@@ -198,49 +223,57 @@ export function DataTableDemo({
     [session],
   );
 
-  const fetchData = React.useCallback(async () => {
-    if (!organizationId) {
-      setData([]);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    const activeLocationId = locationId || siteId || null;
-
-    let resolvedOrganizationId = organizationId;
-    if (organizationId.startsWith("org_")) {
-      const { data: orgRow } = await supabase
-        .from("clerk_organisations")
-        .select("id")
-        .eq("clerk_org_id", organizationId)
-        .maybeSingle();
-
-      if (orgRow?.id) {
-        resolvedOrganizationId = orgRow.id;
+  const fetchData = React.useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (!organizationId) {
+        setData([]);
+        setLoading(false);
+        return;
       }
-    }
 
-    let query = supabase
-      .from("company_raw_uploads")
-      .select("*")
-      .eq("organization_id", resolvedOrganizationId)
-      .order("uploaded_at", { ascending: false });
+      const silent = options?.silent ?? false;
+      if (!silent) {
+        setLoading(true);
+      }
+      const activeLocationId = locationId || siteId || null;
 
-    if (activeLocationId) {
-      query = query.eq("company_location_id", activeLocationId);
-    }
+      let resolvedOrganizationId = organizationId;
+      if (organizationId.startsWith("org_")) {
+        const { data: orgRow } = await supabase
+          .from("clerk_organisations")
+          .select("id")
+          .eq("clerk_org_id", organizationId)
+          .maybeSingle();
 
-    const { data: files, error } = await query.limit(pageSize);
+        if (orgRow?.id) {
+          resolvedOrganizationId = orgRow.id;
+        }
+      }
 
-    if (error) {
-      console.error("Error fetching Supabase data:", error);
-      setData([]);
-    } else {
-      setData((files as UploadedFile[]) || []);
-    }
-    setLoading(false);
-  }, [supabase, organizationId, locationId, siteId, pageSize]);
+      let query = supabase
+        .from("company_raw_uploads")
+        .select("*")
+        .eq("organization_id", resolvedOrganizationId)
+        .order("uploaded_at", { ascending: false });
+
+      if (activeLocationId) {
+        query = query.eq("company_location_id", activeLocationId);
+      }
+
+      const { data: files, error } = await query.limit(pageSize);
+
+      if (error) {
+        console.error("Error fetching Supabase data:", error);
+        setData([]);
+      } else {
+        setData((files as UploadedFile[]) || []);
+      }
+      if (!silent) {
+        setLoading(false);
+      }
+    },
+    [supabase, organizationId, locationId, siteId, pageSize],
+  );
 
   React.useEffect(() => {
     let mounted = true;
@@ -258,6 +291,21 @@ export function DataTableDemo({
       mounted = false;
     };
   }, [fetchData]);
+
+  React.useEffect(() => {
+    const hasInFlightUploads = data.some((file) => isInFlight(file));
+    if (!hasInFlightUploads) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void fetchData({ silent: true });
+    }, 3000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [data, fetchData]);
 
   const pendingReviewCount = React.useMemo(
     () => data.filter((file) => isPendingReview(file)).length,
@@ -324,14 +372,46 @@ export function DataTableDemo({
           : "Activity type overridden during review.",
     };
 
-    const { error } = await supabase
-      .from("company_raw_uploads")
-      .update(payload)
-      .eq("id", reviewTarget.id);
-
-    if (error) {
+    try {
+      await updateUploadState(reviewTarget.id, payload);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Could not queue upload.";
       console.error("Review update failed:", error);
-      toast.error(`Could not queue upload: ${error.message}`);
+      toast.error(`Could not queue upload: ${message}`);
+      setReviewSaving(false);
+      return;
+    }
+
+    const { data: persistedUpload, error: persistedUploadError } =
+      await supabase
+        .from("company_raw_uploads")
+        .select(
+          "id, activity_type, parsing_status, activity_type_review_status, activity_type_review_reason",
+        )
+        .eq("id", reviewTarget.id)
+        .maybeSingle();
+
+    if (persistedUploadError) {
+      console.error(
+        "Could not verify persisted upload state:",
+        persistedUploadError,
+      );
+      toast.error(
+        "Saved, but could not verify persisted activity type. Please refresh and confirm.",
+      );
+      await fetchData();
+      setReviewSaving(false);
+      closeReviewSheet();
+      return;
+    }
+
+    const persistedActivityType = persistedUpload?.activity_type ?? null;
+    if (persistedActivityType !== reviewActivityType) {
+      toast.error(
+        `Saved state mismatch: expected ${reviewActivityType}, but database has ${persistedActivityType ?? "none"}.`,
+      );
+      await fetchData();
       setReviewSaving(false);
       return;
     }
@@ -342,6 +422,7 @@ export function DataTableDemo({
           ? {
               ...file,
               ...payload,
+              ...persistedUpload,
             }
           : file,
       ),
@@ -349,7 +430,7 @@ export function DataTableDemo({
     toast.success("Upload queued for processing.");
     setReviewSaving(false);
     closeReviewSheet();
-  }, [closeReviewSheet, reviewActivityType, reviewTarget, supabase]);
+  }, [closeReviewSheet, fetchData, reviewActivityType, reviewTarget, supabase]);
 
   const columns = React.useMemo<ColumnDef<UploadedFile>[]>(
     () => [

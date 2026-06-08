@@ -33,6 +33,26 @@ function isUuid(value: string): boolean {
   );
 }
 
+async function updateUploadState(
+  uploadId: string,
+  payload: Record<string, unknown>,
+) {
+  const response = await fetch("/api/pipeline/update-upload-state", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ upload_id: uploadId, ...payload }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || "Could not update upload state.");
+  }
+
+  return response.json();
+}
+
 export default function FileUploader() {
   const { locationId } = useParams<{ locationId: string }>();
   const { user } = useUser();
@@ -174,7 +194,7 @@ export default function FileUploader() {
       activity_type: activityType || null,
       upload_method: "manual",
       uploaded_at: new Date().toISOString(),
-      parsing_status: "pending",
+      parsing_status: "pending_review",
       // i need this so i know where each file comes from etc.
       company_location_id: locationId,
       ...(hasEnterpriseInputs
@@ -203,7 +223,6 @@ export default function FileUploader() {
     } else {
       setModalOpen(false);
       setSelectedFile(null);
-      setIsUploading(false);
 
       console.log("Trying to insert metadata:", metadata);
       const { data: tableData, error: tableError } = await supabase
@@ -213,6 +232,14 @@ export default function FileUploader() {
 
       if (tableError) {
         console.error("Insert error message:", tableError);
+        const { error: cleanupError } = await supabase.storage
+          .from("esg-data-2")
+          .remove([filePath]);
+
+        if (cleanupError) {
+          console.error("Storage cleanup failed:", cleanupError);
+        }
+
         setUploadStatus("error");
         toast.error(`Insert failed: ${tableError.message}`);
         setTimeout(() => setUploadStatus("idle"), 3000);
@@ -220,15 +247,131 @@ export default function FileUploader() {
         console.log(tableData);
         const row_id = tableData[0]?.id;
         console.log("Insert successful, row ID:", row_id);
-        setUploadStatus("success");
-        setRefreshTrigger((prev) => prev + 1);
+
+        if (row_id) {
+          try {
+            const preflightResponse = await fetch("/api/pipeline/preflight", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                upload_id: row_id,
+                activity_type_override: activityType || undefined,
+              }),
+            });
+
+            if (!preflightResponse.ok) {
+              const errorText = await preflightResponse.text();
+              throw new Error(errorText || "Preflight request failed");
+            }
+
+            const preflight = await preflightResponse.json();
+            const verdict = preflight?.verdict as string | undefined;
+            const verdictDetail = preflight?.verdict_detail as
+              | string
+              | undefined;
+
+            if (verdict && verdict !== "ready") {
+              await updateUploadState(row_id, {
+                error_message: verdictDetail || "Upload requires review.",
+                inferred_activity_type:
+                  preflight?.inferred_activity_type ?? null,
+                inference_confidence: preflight?.inference_confidence ?? null,
+                activity_type_review_status: "pending_review",
+                activity_type_review_reason:
+                  verdictDetail || "Upload requires manual review.",
+              });
+
+              setUploadStatus("success");
+              setRefreshTrigger((prev) => prev + 1);
+              toast.success(
+                `Upload held for review: ${verdictDetail || verdict}`,
+              );
+            } else {
+              const { error: readyUpdateError } = await supabase
+                .from("company_raw_uploads")
+                .update({
+                  parsing_status: "pending",
+                  error_message: null,
+                  inferred_activity_type:
+                    preflight?.inferred_activity_type ?? null,
+                  inference_confidence: preflight?.inference_confidence ?? null,
+                  activity_type_review_status: activityType
+                    ? "manual_override"
+                    : "auto_accepted",
+                  activity_type_review_reason: activityType
+                    ? "Manual activity type accepted after preflight."
+                    : "Auto accepted after preflight.",
+                })
+                .eq("id", row_id);
+
+              if (readyUpdateError) {
+                throw readyUpdateError;
+              }
+
+              setUploadStatus("success");
+              setRefreshTrigger((prev) => prev + 1);
+              toast.success(
+                activityType
+                  ? "Upload queued with a manual activity type."
+                  : "Upload queued. Activity type will be inferred automatically.",
+              );
+            }
+          } catch (preflightError) {
+            console.error("Preflight failed:", preflightError);
+            const fallbackMessage =
+              preflightError instanceof Error
+                ? preflightError.message
+                : "Preflight check failed.";
+
+            try {
+              await updateUploadState(row_id, {
+                error_message: `Preflight unavailable: ${fallbackMessage}`,
+                activity_type_review_status: "pending_review",
+                activity_type_review_reason: `Preflight unavailable: ${fallbackMessage}`,
+              });
+
+              setUploadStatus("success");
+              setRefreshTrigger((prev) => prev + 1);
+              toast.success(
+                `Upload saved, but preflight could not run. Moved to review: ${fallbackMessage}`,
+              );
+            } catch (reviewError) {
+              console.error("Could not mark upload for review:", reviewError);
+
+              const { error: deleteUploadError } = await supabase
+                .from("company_raw_uploads")
+                .delete()
+                .eq("id", row_id);
+
+              if (deleteUploadError) {
+                console.error(
+                  "Could not delete failed upload row:",
+                  deleteUploadError,
+                );
+              }
+
+              const { error: cleanupError } = await supabase.storage
+                .from("esg-data-2")
+                .remove([filePath]);
+
+              if (cleanupError) {
+                console.error("Storage cleanup failed:", cleanupError);
+              }
+
+              setUploadStatus("error");
+              toast.error(
+                `Upload failed because preflight could not be applied: ${fallbackMessage}`,
+              );
+            }
+          }
+        }
+
         setTimeout(() => setUploadStatus("idle"), 3000);
-        toast.success(
-          activityType
-            ? "Upload queued with a manual activity type."
-            : "Upload queued. Activity type will be inferred automatically.",
-        );
       }
+
+      setIsUploading(false);
     }
   };
 
