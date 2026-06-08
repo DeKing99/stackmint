@@ -15,8 +15,6 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { DataTableDemo } from "../../../../../../components/file-table";
-import { Calendar23 } from "@/components/calendar-23";
-import { type DateRange } from "react-day-picker";
 import { v4 as uuidv4 } from "uuid";
 import { useParams } from "next/navigation";
 import { createClerkSupabaseClient } from "@/lib/supabase-client";
@@ -35,6 +33,26 @@ function isUuid(value: string): boolean {
   );
 }
 
+async function updateUploadState(
+  uploadId: string,
+  payload: Record<string, unknown>,
+) {
+  const response = await fetch("/api/pipeline/update-upload-state", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ upload_id: uploadId, ...payload }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || "Could not update upload state.");
+  }
+
+  return response.json();
+}
+
 export default function FileUploader() {
   const { locationId } = useParams<{ locationId: string }>();
   const { user } = useUser();
@@ -48,8 +66,15 @@ export default function FileUploader() {
   const [uploadStatus, setUploadStatus] = useState<
     "idle" | "success" | "error"
   >("idle");
-  const [range, setRange] = useState<DateRange | undefined>();
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [enterpriseInputs, setEnterpriseInputs] = useState({
+    reportingPeriod: "",
+    supplier: "",
+    department: "",
+    spendAmount: "",
+    invoiceNumber: "",
+    category: "",
+  });
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: (acceptedFiles) => {
@@ -57,6 +82,14 @@ export default function FileUploader() {
       if (!file) return;
       setActivityType("");
       setShowAdvanced(false);
+      setEnterpriseInputs({
+        reportingPeriod: "",
+        supplier: "",
+        department: "",
+        spendAmount: "",
+        invoiceNumber: "",
+        category: "",
+      });
       setSelectedFile(file);
       setModalOpen(true);
     },
@@ -132,7 +165,20 @@ export default function FileUploader() {
       locationId || "unknown"
     }/${uniqueFileName}`;
 
-    let row_id;
+    const parsedSpendAmount = Number.parseFloat(enterpriseInputs.spendAmount);
+    const uploadEnterpriseInputs = {
+      reporting_period: enterpriseInputs.reportingPeriod.trim() || undefined,
+      supplier: enterpriseInputs.supplier.trim() || undefined,
+      department: enterpriseInputs.department.trim() || undefined,
+      spend_amount: Number.isFinite(parsedSpendAmount)
+        ? parsedSpendAmount
+        : undefined,
+      invoice_number: enterpriseInputs.invoiceNumber.trim() || undefined,
+      category: enterpriseInputs.category.trim() || undefined,
+    };
+    const hasEnterpriseInputs = Object.values(uploadEnterpriseInputs).some(
+      (v) => v !== undefined,
+    );
 
     const metadata = {
       file_name: safeName,
@@ -148,9 +194,16 @@ export default function FileUploader() {
       activity_type: activityType || null,
       upload_method: "manual",
       uploaded_at: new Date().toISOString(),
-      parsing_status: "pending",
+      parsing_status: "pending_review",
       // i need this so i know where each file comes from etc.
       company_location_id: locationId,
+      ...(hasEnterpriseInputs
+        ? {
+            parsing_stage_summary: {
+              enterprise_inputs: uploadEnterpriseInputs,
+            },
+          }
+        : {}),
     };
 
     const { error } = await supabase.storage
@@ -170,7 +223,6 @@ export default function FileUploader() {
     } else {
       setModalOpen(false);
       setSelectedFile(null);
-      setIsUploading(false);
 
       console.log("Trying to insert metadata:", metadata);
       const { data: tableData, error: tableError } = await supabase
@@ -180,6 +232,14 @@ export default function FileUploader() {
 
       if (tableError) {
         console.error("Insert error message:", tableError);
+        const { error: cleanupError } = await supabase.storage
+          .from("esg-data-2")
+          .remove([filePath]);
+
+        if (cleanupError) {
+          console.error("Storage cleanup failed:", cleanupError);
+        }
+
         setUploadStatus("error");
         toast.error(`Insert failed: ${tableError.message}`);
         setTimeout(() => setUploadStatus("idle"), 3000);
@@ -187,15 +247,131 @@ export default function FileUploader() {
         console.log(tableData);
         const row_id = tableData[0]?.id;
         console.log("Insert successful, row ID:", row_id);
-        setUploadStatus("success");
-        setRefreshTrigger((prev) => prev + 1);
+
+        if (row_id) {
+          try {
+            const preflightResponse = await fetch("/api/pipeline/preflight", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                upload_id: row_id,
+                activity_type_override: activityType || undefined,
+              }),
+            });
+
+            if (!preflightResponse.ok) {
+              const errorText = await preflightResponse.text();
+              throw new Error(errorText || "Preflight request failed");
+            }
+
+            const preflight = await preflightResponse.json();
+            const verdict = preflight?.verdict as string | undefined;
+            const verdictDetail = preflight?.verdict_detail as
+              | string
+              | undefined;
+
+            if (verdict && verdict !== "ready") {
+              await updateUploadState(row_id, {
+                error_message: verdictDetail || "Upload requires review.",
+                inferred_activity_type:
+                  preflight?.inferred_activity_type ?? null,
+                inference_confidence: preflight?.inference_confidence ?? null,
+                activity_type_review_status: "pending_review",
+                activity_type_review_reason:
+                  verdictDetail || "Upload requires manual review.",
+              });
+
+              setUploadStatus("success");
+              setRefreshTrigger((prev) => prev + 1);
+              toast.success(
+                `Upload held for review: ${verdictDetail || verdict}`,
+              );
+            } else {
+              const { error: readyUpdateError } = await supabase
+                .from("company_raw_uploads")
+                .update({
+                  parsing_status: "pending",
+                  error_message: null,
+                  inferred_activity_type:
+                    preflight?.inferred_activity_type ?? null,
+                  inference_confidence: preflight?.inference_confidence ?? null,
+                  activity_type_review_status: activityType
+                    ? "manual_override"
+                    : "auto_accepted",
+                  activity_type_review_reason: activityType
+                    ? "Manual activity type accepted after preflight."
+                    : "Auto accepted after preflight.",
+                })
+                .eq("id", row_id);
+
+              if (readyUpdateError) {
+                throw readyUpdateError;
+              }
+
+              setUploadStatus("success");
+              setRefreshTrigger((prev) => prev + 1);
+              toast.success(
+                activityType
+                  ? "Upload queued with a manual activity type."
+                  : "Upload queued. Activity type will be inferred automatically.",
+              );
+            }
+          } catch (preflightError) {
+            console.error("Preflight failed:", preflightError);
+            const fallbackMessage =
+              preflightError instanceof Error
+                ? preflightError.message
+                : "Preflight check failed.";
+
+            try {
+              await updateUploadState(row_id, {
+                error_message: `Preflight unavailable: ${fallbackMessage}`,
+                activity_type_review_status: "pending_review",
+                activity_type_review_reason: `Preflight unavailable: ${fallbackMessage}`,
+              });
+
+              setUploadStatus("success");
+              setRefreshTrigger((prev) => prev + 1);
+              toast.success(
+                `Upload saved, but preflight could not run. Moved to review: ${fallbackMessage}`,
+              );
+            } catch (reviewError) {
+              console.error("Could not mark upload for review:", reviewError);
+
+              const { error: deleteUploadError } = await supabase
+                .from("company_raw_uploads")
+                .delete()
+                .eq("id", row_id);
+
+              if (deleteUploadError) {
+                console.error(
+                  "Could not delete failed upload row:",
+                  deleteUploadError,
+                );
+              }
+
+              const { error: cleanupError } = await supabase.storage
+                .from("esg-data-2")
+                .remove([filePath]);
+
+              if (cleanupError) {
+                console.error("Storage cleanup failed:", cleanupError);
+              }
+
+              setUploadStatus("error");
+              toast.error(
+                `Upload failed because preflight could not be applied: ${fallbackMessage}`,
+              );
+            }
+          }
+        }
+
         setTimeout(() => setUploadStatus("idle"), 3000);
-        toast.success(
-          activityType
-            ? "Upload queued with a manual activity type."
-            : "Upload queued. Activity type will be inferred automatically.",
-        );
       }
+
+      setIsUploading(false);
     }
   };
 
@@ -238,6 +414,14 @@ export default function FileUploader() {
             if (!open) {
               setShowAdvanced(false);
               setActivityType("");
+              setEnterpriseInputs({
+                reportingPeriod: "",
+                supplier: "",
+                department: "",
+                spendAmount: "",
+                invoiceNumber: "",
+                category: "",
+              });
             }
           }}
         >
@@ -317,6 +501,115 @@ export default function FileUploader() {
                         : "Leave this blank unless you need to force a specific classification before parsing starts."}
                     </p>
                   </label>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="text-sm font-medium text-slate-900">
+                        Reporting period
+                      </span>
+                      <input
+                        type="text"
+                        value={enterpriseInputs.reportingPeriod}
+                        onChange={(e) =>
+                          setEnterpriseInputs((prev) => ({
+                            ...prev,
+                            reportingPeriod: e.target.value,
+                          }))
+                        }
+                        placeholder="e.g. 2026-05"
+                        className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm shadow-sm outline-none transition focus:border-sky-400"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-sm font-medium text-slate-900">
+                        Supplier
+                      </span>
+                      <input
+                        type="text"
+                        value={enterpriseInputs.supplier}
+                        onChange={(e) =>
+                          setEnterpriseInputs((prev) => ({
+                            ...prev,
+                            supplier: e.target.value,
+                          }))
+                        }
+                        placeholder="Supplier name or UUID"
+                        className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm shadow-sm outline-none transition focus:border-sky-400"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-sm font-medium text-slate-900">
+                        Department
+                      </span>
+                      <input
+                        type="text"
+                        value={enterpriseInputs.department}
+                        onChange={(e) =>
+                          setEnterpriseInputs((prev) => ({
+                            ...prev,
+                            department: e.target.value,
+                          }))
+                        }
+                        placeholder="Department name or UUID"
+                        className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm shadow-sm outline-none transition focus:border-sky-400"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-sm font-medium text-slate-900">
+                        Spend amount
+                      </span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={enterpriseInputs.spendAmount}
+                        onChange={(e) =>
+                          setEnterpriseInputs((prev) => ({
+                            ...prev,
+                            spendAmount: e.target.value,
+                          }))
+                        }
+                        placeholder="e.g. 1250.50"
+                        className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm shadow-sm outline-none transition focus:border-sky-400"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-sm font-medium text-slate-900">
+                        Invoice / document
+                      </span>
+                      <input
+                        type="text"
+                        value={enterpriseInputs.invoiceNumber}
+                        onChange={(e) =>
+                          setEnterpriseInputs((prev) => ({
+                            ...prev,
+                            invoiceNumber: e.target.value,
+                          }))
+                        }
+                        placeholder="Invoice number or doc reference"
+                        className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm shadow-sm outline-none transition focus:border-sky-400"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-sm font-medium text-slate-900">
+                        Category
+                      </span>
+                      <input
+                        type="text"
+                        value={enterpriseInputs.category}
+                        onChange={(e) =>
+                          setEnterpriseInputs((prev) => ({
+                            ...prev,
+                            category: e.target.value,
+                          }))
+                        }
+                        placeholder="e.g. materials_construction"
+                        className="mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm shadow-sm outline-none transition focus:border-sky-400"
+                      />
+                    </label>
+                  </div>
+                  <p className="mt-3 text-xs text-slate-500">
+                    Optional fields. Leave blank to let the parser infer values
+                    from file content and document metadata.
+                  </p>
                 </div>
               ) : null}
             </div>
@@ -388,7 +681,7 @@ export default function FileUploader() {
           {/* Replace "your_table_name" with your actual Supabase table name */}
           <DataTableDemo
             key={refreshTrigger}
-            organizationId={organization?.id!}
+            organizationId={organization?.id ?? ""}
             locationId={locationId}
           />
         </div>

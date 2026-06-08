@@ -87,4 +87,101 @@ export const activityTypes: ActivityType[] = [
     label: "Downstream Transport",
     description: "Downstream transportation and distribution",
   },
+
+  // canonical factor activity types (mapped to schema activity groups in backend pipeline)
+  {
+    value: "stationary_combustion_liquid_fuels",
+    label: "Stationary Combustion (Liquid Fuels)",
+    description: "Canonical factor mapping for stationary liquid fuels",
+  },
+  {
+    value: "stationary_combustion_gaseous_fuels",
+    label: "Stationary Combustion (Gaseous Fuels)",
+    description: "Canonical factor mapping for stationary gaseous fuels",
+  },
+  {
+    value: "purchased_electricity_uk_grid",
+    label: "Purchased Electricity (UK Grid)",
+    description: "Canonical factor mapping for UK grid electricity",
+  },
+  {
+    value: "electricity_for_evs",
+    label: "Electricity for EVs",
+    description: "Canonical factor mapping for EV electricity",
+  },
+  {
+    value: "freight_hgv",
+    label: "Freight (HGV)",
+    description: "Canonical factor mapping for HGV freight",
+  },
+  {
+    value: "freight_air",
+    label: "Freight (Air)",
+    description: "Canonical factor mapping for air freight",
+  },
+  {
+    value: "freight_cargo_ship",
+    label: "Freight (Cargo Ship)",
+    description: "Canonical factor mapping for cargo ship freight",
+  },
+  {
+    value: "business_travel_air",
+    label: "Business Travel (Air)",
+    description: "Canonical factor mapping for business air travel",
+  },
+  {
+    value: "business_travel_rail",
+    label: "Business Travel (Rail)",
+    description: "Canonical factor mapping for business rail travel",
+  },
+  {
+    value: "hotel_stays",
+    label: "Hotel Stays",
+    description: "Canonical factor mapping for hotel stays",
+  },
+  {
+    value: "waste_plastic",
+    label: "Waste (Plastic)",
+    description: "Canonical factor mapping for plastic waste",
+  },
+  {
+    value: "waste_construction",
+    label: "Waste (Construction)",
+    description: "Canonical factor mapping for construction waste",
+  },
+  {
+    value: "materials_construction",
+    label: "Materials (Construction)",
+    description: "Canonical factor mapping for construction materials",
+  },
+  {
+    value: "fugitive_refrigerants_blends",
+    label: "Fugitive Refrigerants (Blends)",
+    description: "Canonical factor mapping for refrigerant blends",
+  },
+  {
+    value: "water_supply",
+    label: "Water Supply",
+    description: "Canonical factor mapping for water supply",
+  },
+  {
+    value: "homeworking_heating",
+    label: "Homeworking (Heating)",
+    description: "Canonical factor mapping for homeworking heating",
+  },
+  {
+    value: "managed_vehicle_hgv",
+    label: "Managed Vehicle (HGV)",
+    description: "Canonical factor mapping for managed HGV vehicles",
+  },
+  {
+    value: "well_to_tank_liquid_fuels",
+    label: "Well-to-Tank (Liquid Fuels)",
+    description: "Canonical factor mapping for WTT liquid fuels",
+  },
+  {
+    value: "secr_transport",
+    label: "SECR Transport",
+    description: "Canonical factor mapping for SECR transport",
+  },
 ];

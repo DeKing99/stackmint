@@ -301,6 +301,53 @@ def _mock_supabase_no_factor() -> MagicMock:
     return mock_client
 
 
+def _mock_supabase_with_activity_specific_factor(
+    factors_by_activity: Dict[str, Dict[str, Any]],
+) -> Any:
+    class _Resp:
+        def __init__(self, data: List[Dict[str, Any]]):
+            self.data = data
+
+    class _Query:
+        def __init__(self, factors: Dict[str, Dict[str, Any]]):
+            self._factors = factors
+            self._filters: Dict[str, Any] = {}
+
+        def select(self, *_args, **_kwargs):
+            return self
+
+        def eq(self, key: str, value: Any):
+            self._filters[key] = value
+            return self
+
+        def ilike(self, _key: str, _value: str):
+            return self
+
+        def limit(self, _value: int):
+            return self
+
+        def execute(self):
+            activity_type = self._filters.get("activity_type")
+            row = self._factors.get(activity_type)
+            if not row:
+                return _Resp([])
+
+            for key in ("unit", "region", "year"):
+                if key in self._filters and row.get(key) != self._filters.get(key):
+                    return _Resp([])
+
+            return _Resp([row])
+
+    class _Client:
+        def __init__(self, factors: Dict[str, Dict[str, Any]]):
+            self._factors = factors
+
+        def table(self, _name: str):
+            return _Query(self._factors)
+
+    return _Client(factors_by_activity)
+
+
 class TestEmissionsCalculation:
 
     def test_single_row_calculates_correctly(self):
@@ -315,6 +362,9 @@ class TestEmissionsCalculation:
         }
         result = calculate_emissions_for_row(mock_sb, row, "act-001")
         assert abs(result["co2e"] - 233.0) < 0.01
+        assert abs(result["emissions_kgco2e"] - 233.0) < 0.01
+        assert abs(result["emissions_tco2e"] - 0.233) < 0.0001
+        assert result["reporting_year"] == 2024
         assert result["activity_id"] == "act-001"
         assert result["emission_factor_id"] == "factor-001"
 
@@ -366,6 +416,67 @@ class TestEmissionsCalculation:
 
         mock_query = mock_sb.table.return_value
         assert mock_query.execute.call_count == 1
+
+    def test_enriched_payload_uses_inserted_activity_dimensions(self):
+        from app.parsing.emissions import calculate_emissions_for_row
+        mock_sb = _mock_supabase_with_factor(0.233)
+        row = {
+            "activity_type": "purchased_electricity",
+            "consumption": 1000.0,
+            "unit": "kwh",
+            "date": "2024-06-15",
+        }
+        inserted_activity = {
+            "organization_id": "org-001",
+            "company_location_id": "loc-001",
+            "department_id": "dept-001",
+            "supplier_id": "sup-001",
+            "emission_category_id": "cat-001",
+            "scope": 2,
+            "category": "purchased_electricity",
+        }
+        result = calculate_emissions_for_row(
+            mock_sb,
+            row,
+            "act-001",
+            inserted_activity=inserted_activity,
+        )
+        assert result["organization_id"] == "org-001"
+        assert result["company_location_id"] == "loc-001"
+        assert result["department_id"] == "dept-001"
+        assert result["supplier_id"] == "sup-001"
+        assert result["emission_category_id"] == "cat-001"
+        assert result["scope"] == 2
+        assert result["category"] == "purchased_electricity"
+
+    def test_stationary_combustion_uses_canonical_factor_mapping(self):
+        from app.parsing.emissions import calculate_emissions_for_row
+
+        mock_sb = _mock_supabase_with_activity_specific_factor(
+            {
+                "stationary_combustion_gaseous_fuels": {
+                    "id": "factor-gas-001",
+                    "activity_type": "stationary_combustion_gaseous_fuels",
+                    "unit": "m3",
+                    "factor_value": 0.2,
+                    "region": "UK",
+                    "year": 2024,
+                }
+            }
+        )
+        row = {
+            "activity_type": "stationary_combustion",
+            "fuel_type": "natural_gas",
+            "consumption": 10.0,
+            "unit": "m3",
+            "region": "UK",
+            "year": 2024,
+        }
+
+        result = calculate_emissions_for_row(mock_sb, row, "act-can-001")
+        assert abs(result["co2e"] - 2.0) < 0.001
+        assert result["factor_activity_type"] == "stationary_combustion_gaseous_fuels"
+        assert result["reporting_year"] == 2024
 
 
 class TestEmissionsBatch:
@@ -633,6 +744,48 @@ class TestFactorDiagnostics:
         assert len(attempts) >= 1
         # Should have found on first or early attempt
         assert len(attempts) <= 8
+
+
+class TestEnterpriseFallbacks:
+
+    def test_upload_enterprise_inputs_are_applied_to_mapped_row(self):
+        from app.parsing.pipeline import _apply_enterprise_upload_fallbacks
+
+        mapped_row = {
+            "date": "2024-01-01",
+            "fuel_type": "natural_gas",
+            "consumption": 10.0,
+            "unit": "m3",
+        }
+        upload = {
+            "parsing_stage_summary": {
+                "enterprise_inputs": {
+                    "reporting_period": "2024-01",
+                    "supplier": "Acme Supplies Ltd",
+                    "department": "Operations",
+                    "spend_amount": 1250.5,
+                    "invoice_number": "INV-2024-001",
+                    "category": "materials_construction",
+                }
+            }
+        }
+
+        result = _apply_enterprise_upload_fallbacks(mapped_row, upload)
+        assert result["reporting_period"] == "2024-01"
+        assert result["amount_spent"] == 1250.5
+        assert result["invoice_number"] == "INV-2024-001"
+        assert result["category"] == "materials_construction"
+        assert result["source_system"] == "stackmint_upload"
+        assert result["metadata"]["supplier_name"] == "Acme Supplies Ltd"
+        assert result["metadata"]["department_name"] == "Operations"
+
+    def test_manual_canonical_activity_type_maps_to_schema_activity_type(self):
+        from app.parsing.pipeline import _resolve_upload_activity_type
+
+        upload = {"id": "u1", "activity_type": "business_travel_air"}
+        rows = [{"travel_mode": "air", "distance": 100, "unit": "km", "date": "2024-01-01"}]
+        resolved = _resolve_upload_activity_type(upload, rows)
+        assert resolved == "business_travel"
 
 
 # ---------------------------------------------------------------------------
