@@ -1126,7 +1126,7 @@ def run_parsing_pipeline(upload: Dict[str, Any]) -> Dict[str, Any]:
                         "calculation_method": "spend_based",
                         "classification_confidence": row.get("_classification_confidence"),
                         "emissions_factor_value": row.get("_factor_value"),
-                        "original_currency_amount": row.get("_usd_amount") and row.get("metadata", {}).get("original_currency_amount"),
+                        "original_currency_amount": (row.get("metadata") or {}).get("original_currency_amount"),
                         "usd_amount": row.get("_usd_amount"),
                         "exchange_rate_to_usd": row.get("_exchange_rate"),
                         "estimated_emissions_kgco2e": row.get("emissions_kgco2e"),

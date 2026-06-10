@@ -246,9 +246,8 @@ class TestActivityAndSpendDataDetection:
     def test_has_spend_data_zero_amount(self):
         from app.parsing.spend import has_spend_data
         row = {"amount": 0, "currency": "GBP"}
-        # amount=0 is falsy in Python; the `or` chain resolves to None.
-        # has_spend_data correctly returns False for zero-amount rows since
-        # there is no meaningful spend to calculate emissions for.
+        # A zero-amount transaction has no meaningful spend to calculate emissions for.
+        # The `or` chain in has_spend_data resolves 0 to None, so False is correct.
         assert has_spend_data(row) is False
 
 
@@ -259,7 +258,7 @@ class TestActivityAndSpendDataDetection:
 class TestSingleTransactionCalculation:
 
     def test_basic_calculation_gbp(self):
-        """£10,000 at GBP/USD=1.27, factor=0.12 → 10000*1.27*0.12 = 1524 kgCO2e"""
+        """£10,000 at reference GBP/USD rate, factor=0.12 → 10000 × rate × 0.12 kgCO2e"""
         from app.parsing.spend import (
             calculate_spend_emission_for_transaction,
             clear_spend_factor_cache,

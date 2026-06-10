@@ -90,17 +90,17 @@ class _TTLSpendFactorCache:
         self._store: OrderedDict[str, Tuple[float, Optional[Dict[str, Any]]]] = OrderedDict()
         self._lock = threading.Lock()
 
-    def get(self, key: str) -> Optional[Optional[Dict[str, Any]]]:
+    def get(self, key: str) -> Optional[Dict[str, Any]]:
         import time
         now = time.time()
         with self._lock:
             payload = self._store.get(key)
             if payload is None:
-                return None  # type: ignore[return-value]
+                return None
             expires_at, value = payload
             if expires_at < now:
                 self._store.pop(key, None)
-                return None  # type: ignore[return-value]
+                return None
             self._store.move_to_end(key)
             return value
 
@@ -496,7 +496,8 @@ def resolve_spend_factor(
     """
     cached = _spend_factor_cache.get_with_sentinel(sector_code)
     if cached is not _TTLSpendFactorCache._MISSING:
-        return cached  # type: ignore[return-value]
+        # get_with_sentinel returns Any; cast to the expected type.
+        return cached if isinstance(cached, dict) else None
 
     resp = (
         supabase.table("spend_emission_factors")
@@ -528,7 +529,8 @@ def _batch_resolve_spend_factors(
     for code in unique_codes:
         cached = _spend_factor_cache.get_with_sentinel(code)
         if cached is not _TTLSpendFactorCache._MISSING:
-            result[code] = cached  # type: ignore[assignment]
+            # get_with_sentinel returns Any; cast to the expected type.
+            result[code] = cached if isinstance(cached, dict) else None
         else:
             uncached_codes.append(code)
 
