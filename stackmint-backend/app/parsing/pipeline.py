@@ -27,6 +27,16 @@ from app.db.logs import log_parsing_event
 from app.core.config import settings
 
 from app.parsing.emissions import calculate_emissions_for_batch
+from app.parsing.spend import (
+    calculate_spend_emissions_for_batch,
+    has_activity_data,
+    has_spend_data,
+)
+from app.db.spend import (
+    insert_spend_emissions,
+    insert_spend_transactions,
+    update_spend_transactions_with_emissions,
+)
 
 from supabase import create_client
 
@@ -731,6 +741,9 @@ def run_parsing_pipeline(upload: Dict[str, Any]) -> Dict[str, Any]:
         "emissions_calculated": 0,
         "emissions_skipped": 0,
         "emissions_skipped_by_reason": {},
+        "spend_emissions_calculated": 0,
+        "spend_emissions_skipped": 0,
+        "spend_emissions_skipped_by_reason": {},
     }
 
     try:
@@ -1005,6 +1018,128 @@ def run_parsing_pipeline(upload: Dict[str, Any]) -> Dict[str, Any]:
         else:
             logger.warning("[Pipeline] No trusted emissions rows were calculated for this upload")
             log_parsing_event(upload_id, "WARN", "No trusted emissions rows were calculated")
+
+        # -----------------------------------------
+        # 6b️⃣ Spend-Based Fallback
+        # For rows skipped by activity-based calculation that have spend data
+        # (amount + currency) but no activity quantity + unit, run the
+        # USEEIO spend-based calculation as a fallback.
+        # Priority rule: activity-based > spend-based (no double counting).
+        # -----------------------------------------
+
+        # The skipped_emissions list contains the row indexes that activity-based
+        # calculation could not process. Only those are candidates for spend fallback.
+        skipped_activity_indexes = {
+            sv.get("row_index")
+            for sv in skipped_emissions
+            if isinstance(sv.get("row_index"), int)
+        }
+
+        spend_fallback_rows: List[Dict[str, Any]] = []
+        for row_index in sorted(skipped_activity_indexes):
+            if not isinstance(row_index, int) or row_index >= len(validated_rows):
+                continue
+            original_row = validated_rows[row_index]
+            if has_activity_data(original_row):
+                continue  # Has activity data — the factor lookup just failed; don't fall to spend.
+            if not has_spend_data(original_row):
+                continue  # No spend data either — nothing to compute.
+            spend_fallback_rows.append({
+                **original_row,
+                "organization_id": upload.get("organization_id"),
+                "company_location_id": (
+                    upload.get("company_location_id")
+                    or upload.get("file_site_id")
+                ),
+                # Normalise amount field name for spend engine.
+                "amount": (
+                    original_row.get("amount")
+                    or original_row.get("amount_spent")
+                    or original_row.get("spend_amount")
+                ),
+                # Map date field to transaction_date expected by spend engine.
+                "transaction_date": (
+                    original_row.get("transaction_date")
+                    or original_row.get("date")
+                    or original_row.get("activity_date")
+                ),
+            })
+
+        if spend_fallback_rows:
+            logger.info(
+                "[Pipeline] Running spend-based fallback for %d rows",
+                len(spend_fallback_rows),
+            )
+
+            # Insert spend transactions first (raw financial record).
+            spend_tx_payload = [
+                {
+                    "organization_id": r.get("organization_id"),
+                    "company_location_id": r.get("company_location_id"),
+                    "department_id": r.get("department_id"),
+                    "supplier_id": r.get("supplier_id"),
+                    "transaction_date": r.get("transaction_date"),
+                    "invoice_number": r.get("invoice_number"),
+                    "procurement_category": r.get("procurement_category") or r.get("category"),
+                    "spend_description": (
+                        r.get("spend_description")
+                        or r.get("description")
+                        or r.get("notes")
+                    ),
+                    "amount": r.get("amount"),
+                    "currency": r.get("currency") or "GBP",
+                    "source_upload_id": upload_id,
+                    "metadata": r.get("metadata") or {},
+                }
+                for r in spend_fallback_rows
+            ]
+            inserted_spend_txs = insert_spend_transactions(spend_tx_payload)
+
+            # Map inserted IDs back to rows so emission records can reference them.
+            for i, r in enumerate(spend_fallback_rows):
+                if i < len(inserted_spend_txs):
+                    r["id"] = inserted_spend_txs[i].get("id")
+
+            spend_result = calculate_spend_emissions_for_batch(
+                supabase=supabase,
+                transactions=spend_fallback_rows,
+            )
+            spend_emission_rows = spend_result.get("rows", [])
+            spend_skipped = spend_result.get("skipped_rows", [])
+            spend_summary = spend_result.get("summary", {})
+
+            logger.info(
+                "[Pipeline] Spend-based: %d calculated, %d skipped",
+                len(spend_emission_rows),
+                len(spend_skipped),
+            )
+
+            if spend_emission_rows:
+                insert_spend_emissions(spend_emission_rows)
+
+                # Back-fill spend_transactions with calculated emission data.
+                tx_updates = [
+                    {
+                        "id": row.get("_spend_transaction_id"),
+                        "spend_category": row.get("_spend_category"),
+                        "spend_factor_id": row.get("_spend_factor_id"),
+                        "calculation_method": "spend_based",
+                        "classification_confidence": row.get("_classification_confidence"),
+                        "emissions_factor_value": row.get("_factor_value"),
+                        "original_currency_amount": row.get("_usd_amount") and row.get("metadata", {}).get("original_currency_amount"),
+                        "usd_amount": row.get("_usd_amount"),
+                        "exchange_rate_to_usd": row.get("_exchange_rate"),
+                        "estimated_emissions_kgco2e": row.get("emissions_kgco2e"),
+                    }
+                    for row in spend_emission_rows
+                    if row.get("_spend_transaction_id")
+                ]
+                if tx_updates:
+                    update_spend_transactions_with_emissions(tx_updates)
+
+            stage_counters["spend_emissions_calculated"] = len(spend_emission_rows)
+            stage_counters["spend_emissions_skipped"] = len(spend_skipped)
+            stage_counters["spend_emissions_skipped_by_reason"] = spend_summary.get("skip_reasons", {})
 
         if skipped_emissions:
             logger.info(
