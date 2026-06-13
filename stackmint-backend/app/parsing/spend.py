@@ -376,6 +376,7 @@ def _batch_resolve_spend_categories(
         resp = (
             supabase.table("spend_category_mappings")
             .select("procurement_category, spend_category, sector_code, confidence")
+            .in_("procurement_category", unique_categories)
             .in_("review_status", ["approved", "auto_approved"])
             .not_.is_("spend_category", "null")
             .not_.is_("procurement_category", "null")
