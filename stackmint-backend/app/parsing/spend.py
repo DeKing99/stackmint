@@ -541,19 +541,26 @@ def _batch_resolve_spend_factors(
     if uncached_codes:
         resp = (
             supabase.table("spend_emission_factors")
-            .select("id, factor_code, sector_code, sector_name, factor_value, factor_unit, currency_code, scope, spend_category, source_dataset")
+            .select("id, factor_code, sector_code, sector_name, factor_value, factor_unit, currency_code, scope, spend_category, source_dataset, reporting_year, created_at")
             .in_("sector_code", uncached_codes)
             .eq("factor_status", "active")
             .execute()
         )
-        # Build a best-match map (highest factor_value wins for duplicates — conservative).
+        # Build a best-match map (prefer latest reporting_year, then newest created_at).
         fetched: Dict[str, Dict[str, Any]] = {}
         if resp.data:
             for row in resp.data:
                 sc = _safe_str(row.get("sector_code"))
                 if not sc:
                     continue
-                if sc not in fetched:
+                existing = fetched.get(sc)
+                row_year = int(row.get("reporting_year") or -1)
+                row_created = str(row.get("created_at") or "")
+                if (
+                    existing is None
+                    or row_year > int(existing.get("reporting_year") or -1)
+                    or (row_year == int(existing.get("reporting_year") or -1) and row_created > str(existing.get("created_at") or ""))
+                ):
                     fetched[sc] = row
         for code in uncached_codes:
             factor_row = fetched.get(code)
