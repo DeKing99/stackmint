@@ -348,11 +348,12 @@ def _batch_resolve_spend_categories(
     # Bulk fetch mappings for known suppliers.
     supplier_map: Dict[str, Tuple[Optional[str], Optional[str], float]] = {}
     if unique_suppliers:
-        # Supabase doesn't support bulk ilike — fetch all approved mappings and match in Python.
         resp = (
             supabase.table("spend_category_mappings")
             .select("raw_supplier, spend_category, sector_code, confidence")
+            .in_("raw_supplier", unique_suppliers)
             .in_("review_status", ["approved", "auto_approved"])
+            .not_.is_("raw_supplier", "null")
             .not_.is_("spend_category", "null")
             .execute()
         )
