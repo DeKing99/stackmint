@@ -22,7 +22,7 @@ BEGIN;
 ALTER TABLE public.spend_transactions
     ADD COLUMN IF NOT EXISTS spend_category           text,
     ADD COLUMN IF NOT EXISTS spend_factor_id          uuid,
-    ADD COLUMN IF NOT EXISTS calculation_method       text    DEFAULT 'spend_based',
+    ADD COLUMN IF NOT EXISTS calculation_method       text,
     ADD COLUMN IF NOT EXISTS classification_confidence numeric,
     ADD COLUMN IF NOT EXISTS emissions_factor_value   numeric,
     ADD COLUMN IF NOT EXISTS original_currency_amount numeric,
