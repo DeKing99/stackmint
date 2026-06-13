@@ -1,5 +1,5 @@
 {
-    "editor.fontFamily": "Geist Mono",
+    "editor.fontFamily": "'Geist Mono'",
     "python.analysis.autoImportCompletions": true,
     "python.analysis.typeCheckingMode": "standard",
     "python.terminal.useEnvFile": true
