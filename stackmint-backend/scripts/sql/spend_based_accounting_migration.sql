@@ -159,26 +159,31 @@ SELECT
     s.id                                                        AS supplier_id,
     s.supplier_name,
     s.supplier_category,
-    COALESCE(SUM(st.amount), 0)                                AS total_spend,
-    COALESCE(SUM(e.emissions_kgco2e), 0)                       AS total_emissions_kgco2e,
-    COALESCE(SUM(e.emissions_tco2e),  0)                       AS total_emissions_tco2e,
-    COUNT(DISTINCT st.id)                                       AS transaction_count,
-    COUNT(DISTINCT e.id)                                        AS emission_record_count,
+    COALESCE(st.total_spend, 0)                                 AS total_spend,
+    COALESCE(e.total_emissions_kgco2e, 0)                       AS total_emissions_kgco2e,
+    COALESCE(e.total_emissions_tco2e,  0)                       AS total_emissions_tco2e,
+    COALESCE(st.transaction_count, 0)                           AS transaction_count,
+    COALESCE(e.emission_record_count, 0)                        AS emission_record_count,
     CASE
-        WHEN COALESCE(SUM(st.amount), 0) > 0
-        THEN COALESCE(SUM(e.emissions_kgco2e), 0) / SUM(st.amount)
+        WHEN COALESCE(st.total_spend, 0) > 0
+        THEN COALESCE(e.total_emissions_kgco2e, 0) / st.total_spend
         ELSE NULL
     END                                                         AS emissions_intensity_per_currency_unit
 FROM public.company_suppliers s
-LEFT JOIN public.spend_transactions st
-    ON st.supplier_id = s.id
-LEFT JOIN public.company_emissions e
-    ON e.supplier_id = s.id
-   AND e.calculation_method = 'spend_based'
-GROUP BY
-    s.id,
-    s.supplier_name,
-    s.supplier_category;
+LEFT JOIN (
+    SELECT supplier_id, SUM(amount) AS total_spend, COUNT(DISTINCT id) AS transaction_count
+    FROM public.spend_transactions
+    GROUP BY supplier_id
+) st ON st.supplier_id = s.id
+LEFT JOIN (
+    SELECT supplier_id,
+           SUM(emissions_kgco2e) AS total_emissions_kgco2e,
+           SUM(emissions_tco2e) AS total_emissions_tco2e,
+           COUNT(DISTINCT id) AS emission_record_count
+    FROM public.company_emissions
+    WHERE calculation_method = 'spend_based'
+    GROUP BY supplier_id
+) e ON e.supplier_id = s.id;
 
 -- =============================================================================
 -- 8. SEED: COMMON SPEND CATEGORY MAPPINGS
