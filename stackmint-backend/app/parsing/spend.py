@@ -506,6 +506,8 @@ def resolve_spend_factor(
         .select("id, factor_code, sector_code, sector_name, factor_value, factor_unit, currency_code, scope, spend_category, source_dataset")
         .eq("sector_code", sector_code)
         .eq("factor_status", "active")
+        .order("reporting_year", desc=True)
+        .order("created_at", desc=True)
         .limit(1)
         .execute()
     )
