@@ -91,7 +91,6 @@ export function ElectricityBarChart({
               dataKey="value"
               strokeWidth={2}
               radius={8}
-              activeIndex={1}
               activeBar={({ ...props }) => {
                 return (
                   <Rectangle

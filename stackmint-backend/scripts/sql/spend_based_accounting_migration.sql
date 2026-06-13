@@ -155,35 +155,43 @@ CREATE INDEX IF NOT EXISTS idx_company_emissions_source_system
 -- v_supplier_emissions_hotspots — update to use company_emissions for spend-based
 -- instead of only estimated_emissions_kgco2e from spend_transactions.
 CREATE OR REPLACE VIEW public.v_supplier_emissions_hotspots AS
+WITH spend AS (
+    SELECT
+        supplier_id,
+        SUM(amount) AS total_spend,
+        COUNT(*) AS transaction_count
+    FROM public.spend_transactions
+    GROUP BY supplier_id
+),
+emissions AS (
+    SELECT
+        supplier_id,
+        SUM(emissions_kgco2e) AS total_emissions_kgco2e,
+        SUM(emissions_tco2e) AS total_emissions_tco2e,
+        COUNT(*) AS emission_record_count
+    FROM public.company_emissions
+    WHERE calculation_method = 'spend_based'
+    GROUP BY supplier_id
+)
 SELECT
     s.id                                                        AS supplier_id,
     s.supplier_name,
     s.supplier_category,
-    COALESCE(st.total_spend, 0)                                 AS total_spend,
-    COALESCE(e.total_emissions_kgco2e, 0)                       AS total_emissions_kgco2e,
-    COALESCE(e.total_emissions_tco2e,  0)                       AS total_emissions_tco2e,
-    COALESCE(st.transaction_count, 0)                           AS transaction_count,
-    COALESCE(e.emission_record_count, 0)                        AS emission_record_count,
+    COALESCE(sp.total_spend, 0)                                 AS total_spend,
+    COALESCE(em.total_emissions_kgco2e, 0)                      AS total_emissions_kgco2e,
+    COALESCE(em.total_emissions_tco2e,  0)                      AS total_emissions_tco2e,
+    COALESCE(sp.transaction_count, 0)                           AS transaction_count,
+    COALESCE(em.emission_record_count, 0)                       AS emission_record_count,
     CASE
-        WHEN COALESCE(st.total_spend, 0) > 0
-        THEN COALESCE(e.total_emissions_kgco2e, 0) / st.total_spend
+        WHEN COALESCE(sp.total_spend, 0) > 0
+        THEN em.total_emissions_kgco2e / sp.total_spend
         ELSE NULL
     END                                                         AS emissions_intensity_per_currency_unit
 FROM public.company_suppliers s
-LEFT JOIN (
-    SELECT supplier_id, SUM(amount) AS total_spend, COUNT(DISTINCT id) AS transaction_count
-    FROM public.spend_transactions
-    GROUP BY supplier_id
-) st ON st.supplier_id = s.id
-LEFT JOIN (
-    SELECT supplier_id,
-           SUM(emissions_kgco2e) AS total_emissions_kgco2e,
-           SUM(emissions_tco2e) AS total_emissions_tco2e,
-           COUNT(DISTINCT id) AS emission_record_count
-    FROM public.company_emissions
-    WHERE calculation_method = 'spend_based'
-    GROUP BY supplier_id
-) e ON e.supplier_id = s.id;
+LEFT JOIN spend sp
+    ON sp.supplier_id = s.id
+LEFT JOIN emissions em
+    ON em.supplier_id = s.id;
 
 -- =============================================================================
 -- 8. SEED: COMMON SPEND CATEGORY MAPPINGS

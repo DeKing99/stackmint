@@ -35,7 +35,7 @@ export default async function AdminDashboard(params: {
       {query && (
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-xl font-semibold mb-4">
-            Search Results for "{query}"
+            Search Results for &quot;{query}&quot;
           </h2>
 
           {users.length === 0 ? (

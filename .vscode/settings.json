@@ -2,5 +2,9 @@
     "editor.fontFamily": "'Geist Mono'",
     "python.analysis.autoImportCompletions": true,
     "python.analysis.typeCheckingMode": "standard",
-    "python.terminal.useEnvFile": true
+    "python.terminal.useEnvFile": true,
+    "python.defaultInterpreterPath": "${workspaceFolder}/stackmint-backend/venv/bin/python",
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}/stackmint-backend"
+    ]
 }

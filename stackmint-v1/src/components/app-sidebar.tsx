@@ -15,7 +15,6 @@ import {
   Blocks,
   Map,
   FileChartPie,
-  Settings,
   Users2,
   Building,
 } from "lucide-react";

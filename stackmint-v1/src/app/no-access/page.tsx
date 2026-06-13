@@ -17,7 +17,7 @@ export default function NoAccessPage() {
         <div className="space-y-2">
           <h1 className="text-3xl font-bold text-gray-900">Access Denied</h1>
           <p className="text-gray-600">
-            You don't have permission to access this resource.
+            You don&apos;t have permission to access this resource.
           </p>
         </div>
 
@@ -26,11 +26,11 @@ export default function NoAccessPage() {
             <strong>Why am I here?</strong>
           </p>
           <ul className="text-sm text-red-700 list-disc list-inside mt-2 space-y-1">
-            <li>You haven't been assigned to any locations yet</li>
+            <li>You haven&apos;t been assigned to any locations yet</li>
             <li>
-              You're trying to access a location you don't have permission for
+              You&apos;re trying to access a location you don&apos;t have permission for
             </li>
-            <li>Your account role doesn't allow this action</li>
+            <li>Your account role doesn&apos;t allow this action</li>
           </ul>
         </div>
 

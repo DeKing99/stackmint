@@ -14,16 +14,6 @@ import {
 import { ChartRadarGridCircle } from "@/components/chart-radar-grid-circle";
 import { ElectricityBarChart } from "@/components/chart-bar-active";
 import { ChartPieLegend } from "@/components/chart-pie-legend";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-} from "@/components/ui/dropdown-menu";
 
 type Site = {
   id: string;
@@ -31,15 +21,12 @@ type Site = {
   site_slug: string;
   site_location: string;
 };
-type Period = { label: string; value: string };
 
 export default function SitesPage() {
   const { locationSlug } = useParams<{ locationSlug: string }>();
   const { session } = useSession();
   const [site, setSite] = useState<Site | null>(null);
   //const [workerNumber, setWorkerNumber] = useState(0);
-  const [selectedPeriod, setSelectedPeriod] = useState("");
-  const [availablePeriods, setAvailablePeriods] = useState<Period[]>([]);
   //const [processedData, setProcessedData] = useState<ESGData[] | null>(null);
   const [aggregatedData, setAggregatedData] = useState<ESGData>();
 

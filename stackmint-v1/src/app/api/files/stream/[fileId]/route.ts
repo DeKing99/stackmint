@@ -7,7 +7,10 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-export async function GET(req: Request, { params }: { params: { fileId: string } }) {
+export async function GET(
+  req: Request,
+  { params }: { params: Promise<{ fileId: string }> }
+) {
   const { fileId } = await params;
   const { userId, orgId } = await auth();
 
