@@ -7,9 +7,12 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY! // use service role key only server-side
 );
 
-export async function GET(req: NextRequest, { params }: { params: { fileId: string } }) {
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ fileId: string }> }
+) {
   const { fileId } = await params;
-  const { userId, sessionId, isAuthenticated, orgId } =  await auth()  // optional, but good for security
+  const { sessionId, isAuthenticated, orgId } =  await auth()  // optional, but good for security
 
   if (!sessionId || !isAuthenticated) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

@@ -1,8 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
-//import { createClient } from "@supabase/supabase-js";
-import { createClerkSupabaseClient } from "@/lib/supabase-client";
+import React, { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -11,30 +9,7 @@ import {
   DialogDescription
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { useSession } from "@clerk/nextjs";
 import { VisuallyHidden } from "@ariakit/react/visually-hidden";
-
-
-
-// interface FileData {
-//   id: number;
-//   file_name: string;
-//   file_url: string;
-//   mime_type: string;
-//   created_at: string;
-// }
-
-interface FileData {    
-    id: string;
-    file_name: string;
-    file_site_id: string;
-    mime_type: string;
-    file_url: string;
-    user_id?: string;
-    user_name?: string;
-    organization_id?: string;
-    created_at?: string;
-};
 
 interface FileData2 {
     url: string;
@@ -44,16 +19,6 @@ interface FileData2 {
 export function FilePreviewer() {
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<FileData2 | null>(null);
-
-  const { session } = useSession();
-
-  const supabase = useMemo(
-    () =>
-      createClerkSupabaseClient(
-        () => session?.getToken?.() ?? Promise.resolve(null)
-      ),
-    [session]
-  );
 
   useEffect(() => {
     const handler = async (event: Event) => {

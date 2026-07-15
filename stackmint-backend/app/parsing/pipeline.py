@@ -27,6 +27,16 @@ from app.db.logs import log_parsing_event
 from app.core.config import settings
 
 from app.parsing.emissions import calculate_emissions_for_batch
+from app.parsing.spend import (
+    calculate_spend_emissions_for_batch,
+    has_activity_data,
+    has_spend_data,
+)
+from app.db.spend import (
+    insert_spend_emissions,
+    insert_spend_transactions,
+    update_spend_transactions_with_emissions,
+)
 
 from supabase import create_client
 
@@ -218,6 +228,77 @@ def _preclean_row(row: Dict[str, Any]) -> Dict[str, Any]:
 
 def _normalize_lookup_key(value: str) -> str:
     return re.sub(r"[^a-z0-9]", "", value.strip().lower())
+
+
+def _merge_spend_hints_into_metadata(
+    mapped_row: Dict[str, Any],
+    raw_row: Dict[str, Any],
+    unmapped: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Preserve spend-identifying hints (supplier/category/description/sector) so
+    spend fallback can classify rows even when strict schema mapping drops them.
+    """
+    existing_metadata = mapped_row.get("metadata")
+    metadata: Dict[str, Any] = {}
+    if isinstance(existing_metadata, dict):
+        metadata.update(existing_metadata)
+
+    normalized_sources: Dict[str, Any] = {}
+    for source in (raw_row, unmapped, mapped_row):
+        for key, value in source.items():
+            if not isinstance(key, str):
+                continue
+            normalized_sources[_normalize_lookup_key(key)] = value
+
+    def _pick(*aliases: str) -> Any:
+        for alias in aliases:
+            value = normalized_sources.get(_normalize_lookup_key(alias))
+            if not _is_empty_cell(value):
+                return value
+        return None
+
+    supplier_name = _pick(
+        "supplier_name",
+        "supplier",
+        "vendor_name",
+        "vendor",
+        "payee",
+        "merchant",
+    )
+    if supplier_name is not None:
+        metadata.setdefault("supplier_name", supplier_name)
+
+    procurement_category = _pick(
+        "procurement_category",
+        "category",
+        "spend_category",
+        "commodity_code",
+        "gl_code",
+        "accounting_code",
+        "material_type",
+    )
+    if procurement_category is not None:
+        metadata.setdefault("procurement_category", procurement_category)
+
+    description = _pick(
+        "spend_description",
+        "description",
+        "raw_description",
+        "line_description",
+        "item_description",
+        "notes",
+    )
+    if description is not None:
+        metadata.setdefault("description", description)
+
+    sector_code = _pick("sector_code", "useeio_sector_code", "naics_code", "bea_code")
+    if sector_code is not None:
+        metadata.setdefault("sector_code", sector_code)
+
+    if metadata:
+        mapped_row["metadata"] = metadata
+    return mapped_row
 
 
 def _fill_missing_required_from_unmapped(
@@ -591,6 +672,53 @@ def _propagate_enterprise_fields(
     return validated_row
 
 
+def _build_spend_fallback_row(
+    row: Dict[str, Any],
+    upload: Dict[str, Any],
+) -> Dict[str, Any]:
+    metadata = row.get("metadata")
+    metadata_dict = metadata if isinstance(metadata, dict) else {}
+
+    return {
+        **row,
+        "organization_id": upload.get("organization_id"),
+        "company_location_id": (
+            upload.get("company_location_id")
+            or upload.get("file_site_id")
+        ),
+        # Normalise amount field name for spend engine.
+        "amount": (
+            row.get("amount")
+            or row.get("amount_spent")
+            or row.get("spend_amount")
+        ),
+        # Map date field to transaction_date expected by spend engine.
+        "transaction_date": (
+            row.get("transaction_date")
+            or row.get("date")
+            or row.get("activity_date")
+        ),
+        "procurement_category": (
+            row.get("procurement_category")
+            or row.get("category")
+            or row.get("spend_category")
+            or metadata_dict.get("procurement_category")
+            or metadata_dict.get("category")
+        ),
+        "supplier_name": (
+            row.get("supplier_name")
+            or metadata_dict.get("supplier_name")
+        ),
+        "spend_description": (
+            row.get("spend_description")
+            or row.get("description")
+            or row.get("notes")
+            or metadata_dict.get("description")
+            or metadata_dict.get("notes")
+        ),
+    }
+
+
 def _resolve_upload_activity_type(
     upload: Dict[str, Any],
     raw_rows: List[Dict[str, Any]],
@@ -720,6 +848,7 @@ def run_parsing_pipeline(upload: Dict[str, Any]) -> Dict[str, Any]:
 
     validated_rows: List[Dict[str, Any]] = []
     errors: List[Dict[str, Any]] = []
+    spend_validation_fallback_rows: List[Dict[str, Any]] = []
     carry_state: Dict[str, Any] = {}
 
     # Stage counters — persisted to DB at end
@@ -731,6 +860,9 @@ def run_parsing_pipeline(upload: Dict[str, Any]) -> Dict[str, Any]:
         "emissions_calculated": 0,
         "emissions_skipped": 0,
         "emissions_skipped_by_reason": {},
+        "spend_emissions_calculated": 0,
+        "spend_emissions_skipped": 0,
+        "spend_emissions_skipped_by_reason": {},
     }
 
     try:
@@ -806,6 +938,8 @@ def run_parsing_pipeline(upload: Dict[str, Any]) -> Dict[str, Any]:
 
         logger.info(f"[Pipeline] Processing {len(raw_rows)} rows")
         for idx, raw_row in enumerate(raw_rows):
+            mapped_row: Dict[str, Any] = {}
+            unmapped: Dict[str, Any] = {}
 
             raw_row = _preclean_row(raw_row)
 
@@ -851,6 +985,12 @@ def run_parsing_pipeline(upload: Dict[str, Any]) -> Dict[str, Any]:
                     resolved_activity_type,
                 )
 
+                mapped_row = _merge_spend_hints_into_metadata(
+                    mapped_row,
+                    raw_row,
+                    unmapped,
+                )
+
                 # Keep known dimension values even when another field on the row fails validation.
                 for k, v in mapped_row.items():
                     if _is_empty_cell(v):
@@ -886,6 +1026,12 @@ def run_parsing_pipeline(upload: Dict[str, Any]) -> Dict[str, Any]:
                 logger.warning(f"[Pipeline] Validation error at row {idx}: {str(ve)}")
                 log_parsing_event(upload_id, "ERROR", str(ve), row_number=idx)
 
+                spend_source = mapped_row if mapped_row else raw_row
+                spend_candidate = _build_spend_fallback_row(spend_source, upload)
+                if has_spend_data(spend_candidate):
+                    spend_candidate["row_index"] = idx
+                    spend_validation_fallback_rows.append(spend_candidate)
+
         # -----------------------------------------
         # 4️⃣ Fail if too many errors
         # -----------------------------------------
@@ -896,11 +1042,17 @@ def run_parsing_pipeline(upload: Dict[str, Any]) -> Dict[str, Any]:
         quality = _compute_quality_summary(len(validated_rows), len(errors))
         failure_ratio = (len(errors) / total) if total else 0.0
 
-        if len(validated_rows) == 0:
+        if len(validated_rows) == 0 and not spend_validation_fallback_rows:
             raise ValidationError("No valid rows found after normalization and validation")
 
+        if len(validated_rows) == 0 and spend_validation_fallback_rows:
+            logger.warning(
+                "[Pipeline] No rows passed activity validation, but %d rows are eligible for spend fallback",
+                len(spend_validation_fallback_rows),
+            )
+
         # Enterprise gate: fail only when quality is critically low and sample size is too small.
-        if failure_ratio > 0.8 and len(validated_rows) < 25:
+        if failure_ratio > 0.8 and len(validated_rows) < 25 and not spend_validation_fallback_rows:
             raise ValidationError(
                 f"Data quality too low for ingestion: {quality['quality_score']}% valid rows"
             )
@@ -1005,6 +1157,122 @@ def run_parsing_pipeline(upload: Dict[str, Any]) -> Dict[str, Any]:
         else:
             logger.warning("[Pipeline] No trusted emissions rows were calculated for this upload")
             log_parsing_event(upload_id, "WARN", "No trusted emissions rows were calculated")
+
+        # -----------------------------------------
+        # 6b️⃣ Spend-Based Fallback
+        # For rows skipped by activity-based calculation that have spend data
+        # (amount + currency) but no activity quantity + unit, run the
+        # USEEIO spend-based calculation as a fallback.
+        # Priority rule: activity-based > spend-based (no double counting).
+        # -----------------------------------------
+
+        # The skipped_emissions list contains the row indexes that activity-based
+        # calculation could not process. Only those are candidates for spend fallback.
+        skipped_activity_indexes = {
+            sv.get("row_index")
+            for sv in skipped_emissions
+            if isinstance(sv.get("row_index"), int)
+        }
+
+        spend_fallback_rows: List[Dict[str, Any]] = []
+        for row_index in sorted(skipped_activity_indexes):
+            if not isinstance(row_index, int) or row_index >= len(validated_rows):
+                continue
+            original_row = validated_rows[row_index]
+            if has_activity_data(original_row):
+                continue  # Has activity data — the factor lookup just failed; don't fall to spend.
+            spend_candidate = _build_spend_fallback_row(original_row, upload)
+            if not has_spend_data(spend_candidate):
+                continue  # No spend data either — nothing to compute.
+            spend_candidate["row_index"] = row_index
+            spend_fallback_rows.append(spend_candidate)
+
+        # Also include rows that failed activity-schema validation but still carry
+        # usable spend inputs (amount + currency + optional category hints).
+        existing_row_indexes = {
+            r.get("row_index") for r in spend_fallback_rows if isinstance(r.get("row_index"), int)
+        }
+        for row in spend_validation_fallback_rows:
+            row_index = row.get("row_index")
+            if isinstance(row_index, int) and row_index in existing_row_indexes:
+                continue
+            spend_fallback_rows.append(row)
+
+        if spend_fallback_rows:
+            logger.info(
+                "[Pipeline] Running spend-based fallback for %d rows",
+                len(spend_fallback_rows),
+            )
+
+            # Insert spend transactions first (raw financial record).
+            spend_tx_payload = [
+                {
+                    "organization_id": r.get("organization_id"),
+                    "company_location_id": r.get("company_location_id"),
+                    "department_id": r.get("department_id"),
+                    "supplier_id": r.get("supplier_id"),
+                    "transaction_date": r.get("transaction_date"),
+                    "invoice_number": r.get("invoice_number"),
+                    "procurement_category": r.get("procurement_category") or r.get("category"),
+                    "spend_description": (
+                        r.get("spend_description")
+                        or r.get("description")
+                        or r.get("notes")
+                    ),
+                    "amount": r.get("amount"),
+                    "currency": r.get("currency") or "GBP",
+                    "source_upload_id": upload_id,
+                    "metadata": r.get("metadata") or {},
+                }
+                for r in spend_fallback_rows
+            ]
+            inserted_spend_txs = insert_spend_transactions(spend_tx_payload)
+
+            # Map inserted IDs back to rows so emission records can reference them.
+            for i, r in enumerate(spend_fallback_rows):
+                if i < len(inserted_spend_txs):
+                    r["id"] = inserted_spend_txs[i].get("id")
+
+            spend_result = calculate_spend_emissions_for_batch(
+                supabase=supabase,
+                transactions=spend_fallback_rows,
+            )
+            spend_emission_rows = spend_result.get("rows", [])
+            spend_skipped = spend_result.get("skipped_rows", [])
+            spend_summary = spend_result.get("summary", {})
+
+            logger.info(
+                "[Pipeline] Spend-based: %d calculated, %d skipped",
+                len(spend_emission_rows),
+                len(spend_skipped),
+            )
+
+            if spend_emission_rows:
+                insert_spend_emissions(spend_emission_rows)
+
+                # Back-fill spend_transactions with calculated emission data.
+                tx_updates = [
+                    {
+                        "id": row.get("_spend_transaction_id"),
+                        "spend_category": row.get("_spend_category"),
+                        "spend_factor_id": row.get("_spend_factor_id"),
+                        "calculation_method": "spend_based",
+                        "classification_confidence": row.get("_classification_confidence"),
+                        "emissions_factor_value": row.get("_factor_value"),
+                        "original_currency_amount": (row.get("metadata") or {}).get("original_currency_amount"),
+                        "usd_amount": row.get("_usd_amount"),
+                        "exchange_rate_to_usd": row.get("_exchange_rate"),
+                        "estimated_emissions_kgco2e": row.get("emissions_kgco2e"),
+                    }
+                    for row in spend_emission_rows
+                    if row.get("_spend_transaction_id")
+                ]
+                if tx_updates:
+                    update_spend_transactions_with_emissions(tx_updates)
+
+            stage_counters["spend_emissions_calculated"] = len(spend_emission_rows)
+            stage_counters["spend_emissions_skipped"] = len(spend_skipped)
+            stage_counters["spend_emissions_skipped_by_reason"] = spend_summary.get("skip_reasons", {})
 
         if skipped_emissions:
             logger.info(

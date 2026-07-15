@@ -19,6 +19,10 @@ import { Button } from "@/components/ui/button";
 import { DataTableDemo, UploadedFile } from "@/components/file-table";
 import { createClerkSupabaseClient } from "@/lib/supabase-client";
 
+type CitationApi = {
+  insertCitation?: (payload: { files: UploadedFile[] }) => void;
+};
+
 export function CitationToolbarButton({
   locationRef,
 }: {
@@ -102,11 +106,10 @@ export function CitationToolbarButton({
     }
 
     try {
-      // plugin API may not be fully typed here; cast to any and call if available
-      const anyApi = api as any;
-      if (typeof anyApi.insertCitation === "function") {
+      const citationApi = api as CitationApi;
+      if (typeof citationApi.insertCitation === "function") {
         // plugin API expects a single UploadedFile, pass the selected files
-        anyApi.insertCitation({ files: selectedFiles });
+        citationApi.insertCitation({ files: selectedFiles });
         console.log("Inserted citation for files:", selectedFiles);
         // close modal and reset selection
         setModalOpen(false);
@@ -149,9 +152,9 @@ export function CitationToolbarButton({
 
           {/* Table Section */}
           <div className="flex-1 overflow-auto mt-2 rounded-md border bg-background p-2">
-            {siteId ? (
+            {siteId && organization?.id ? (
               <DataTableDemo
-                organizationId={organization?.id!}
+                organizationId={organization.id}
                 siteId={siteId}
                 onSelectionChange={handleSelectionChange}
               />

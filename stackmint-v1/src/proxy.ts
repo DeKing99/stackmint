@@ -230,7 +230,3 @@ export default clerkMiddleware(async (auth, req) => {
   // Otherwise allow the request
   return;
 });
-
-export const config = {
-  matcher: ["/((?!_next|_static|.*\\..*).*)"],
-};

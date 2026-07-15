@@ -1,10 +1,8 @@
 // citation-plugin.tsx
 import React from "react";
 import { createPlatePlugin } from "platejs/react";
-import type { PlateEditor } from "platejs/react";
 import { Transforms } from "slate";
 import { UploadedFile } from "@/components/file-table";
-import { Badge } from "@/components/ui/badge";
 import { FileIcon } from "lucide-react";
 // const citationPlugin2 = createPlatePlugin({
 //     key: 'citation2',
