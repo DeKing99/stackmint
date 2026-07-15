@@ -505,6 +505,27 @@ class TestBatchCalculation:
         assert result["rows"][0]["source_system"] == "useeio"
         assert result["rows"][0]["activity_unit"] == "USD"
 
+    def test_batch_resolves_category_from_pipeline_style_fields(self):
+        from app.parsing.spend import calculate_spend_emissions_for_batch, clear_spend_factor_cache
+        clear_spend_factor_cache()
+        mock_sb = _mock_supabase_with_factor("511200/US", 0.10, spend_category="software")
+        result = calculate_spend_emissions_for_batch(
+            mock_sb,
+            [
+                {
+                    "amount_spent": 500.0,
+                    "amount": 500.0,
+                    "currency": "USD",
+                    "category": "software",
+                    "transaction_date": "2024-06-15",
+                    "metadata": {"supplier_name": "Acme Software"},
+                }
+            ],
+        )
+        assert result["summary"]["calculated"] == 1
+        assert result["summary"]["skipped"] == 0
+        assert result["rows"][0]["category"] == "software"
+
 
 # ---------------------------------------------------------------------------
 # 5. Reporting Period Extraction

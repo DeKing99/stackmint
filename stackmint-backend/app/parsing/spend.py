@@ -170,6 +170,42 @@ def _normalize_text(text: Optional[str]) -> str:
     return re.sub(r"\s+", " ", text.strip().lower())
 
 
+def _metadata_dict(row: Mapping[str, Any]) -> Mapping[str, Any]:
+    metadata = row.get("metadata")
+    return metadata if isinstance(metadata, Mapping) else {}
+
+
+def _transaction_supplier_name(row: Mapping[str, Any]) -> Optional[str]:
+    metadata = _metadata_dict(row)
+    return (
+        _safe_str(row.get("raw_supplier"))
+        or _safe_str(row.get("supplier_name"))
+        or _safe_str(metadata.get("supplier_name"))
+    )
+
+
+def _transaction_description(row: Mapping[str, Any]) -> Optional[str]:
+    metadata = _metadata_dict(row)
+    return (
+        _safe_str(row.get("raw_description"))
+        or _safe_str(row.get("spend_description"))
+        or _safe_str(row.get("description"))
+        or _safe_str(metadata.get("description"))
+        or _safe_str(metadata.get("notes"))
+    )
+
+
+def _transaction_procurement_category(row: Mapping[str, Any]) -> Optional[str]:
+    metadata = _metadata_dict(row)
+    return (
+        _safe_str(row.get("procurement_category"))
+        or _safe_str(row.get("category"))
+        or _safe_str(row.get("spend_category"))
+        or _safe_str(metadata.get("procurement_category"))
+        or _safe_str(metadata.get("category"))
+    )
+
+
 # ---------------------------------------------------------------------------
 # Step 1 — Currency Conversion
 # ---------------------------------------------------------------------------
@@ -645,16 +681,9 @@ def calculate_spend_emission_for_transaction(
     classification_confidence = 0.0
 
     if not spend_category:
-        raw_supplier = (
-            _safe_str(transaction.get("raw_supplier"))
-            or _safe_str(transaction.get("supplier_name"))
-        )
-        raw_description = (
-            _safe_str(transaction.get("raw_description"))
-            or _safe_str(transaction.get("spend_description"))
-            or _safe_str(transaction.get("description"))
-        )
-        procurement_category = _safe_str(transaction.get("procurement_category"))
+        raw_supplier = _transaction_supplier_name(transaction)
+        raw_description = _transaction_description(transaction)
+        procurement_category = _transaction_procurement_category(transaction)
         spend_category, sector_code, classification_confidence = resolve_spend_category(
             supabase=supabase,
             raw_supplier=raw_supplier,
@@ -735,7 +764,7 @@ def calculate_spend_emission_for_transaction(
     return {
         # Link back to the spend transaction (not a company_activity).
         "activity_id": _safe_str(transaction.get("activity_id")),
-        "emission_factor_id": spend_factor_id,
+        "emission_factor_id": None,
         "co2e": emissions_kgco2e,
         "organization_id": organization_id,
         "company_location_id": company_location_id,
@@ -824,16 +853,9 @@ def calculate_spend_emissions_for_batch(
     logger.info("[SpendBatch] Resolving categories for %d transactions", len(transactions))
     category_keys: List[Tuple[Optional[str], Optional[str], Optional[str]]] = []
     for tx in transactions:
-        raw_supplier = (
-            _safe_str(tx.get("raw_supplier"))
-            or _safe_str(tx.get("supplier_name"))
-        )
-        raw_description = (
-            _safe_str(tx.get("raw_description"))
-            or _safe_str(tx.get("spend_description"))
-            or _safe_str(tx.get("description"))
-        )
-        procurement_category = _safe_str(tx.get("procurement_category"))
+        raw_supplier = _transaction_supplier_name(tx)
+        raw_description = _transaction_description(tx)
+        procurement_category = _transaction_procurement_category(tx)
         category_keys.append((raw_supplier, raw_description, procurement_category))
 
     category_results = _batch_resolve_spend_categories(supabase, category_keys)
@@ -957,7 +979,7 @@ def calculate_spend_emissions_for_batch(
 
             emission_row: Dict[str, Any] = {
                 "activity_id": _safe_str(tx.get("activity_id")),
-                "emission_factor_id": spend_factor_id,
+                "emission_factor_id": None,
                 "co2e": emissions_kgco2e,
                 "organization_id": _safe_str(tx.get("organization_id")),
                 "company_location_id": _safe_str(tx.get("company_location_id")),
