@@ -14,6 +14,12 @@ import { MapPinned, ChevronRight } from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
 import { createClerkSupabaseClient } from "@/lib/supabase-client";
 
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
+
 type Report = {
   id: string; // Assuming you have an ID field
   report_name: string;
@@ -28,6 +34,7 @@ export default function SitesPage() {
   const siteLocation = locationId;
   const [isCreatingReport, setIsCreatingReport] = useState(false);
   const [reports, setReports] = useState<Report[]>([]); // Replace `any` with your Site type
+  const [reportOrgId, setReportOrgId] = useState<string | null>(null);
 
   const { session } = useSession();
   const { organization } = useOrganization();
@@ -41,6 +48,36 @@ export default function SitesPage() {
     [session],
   );
 
+  useEffect(() => {
+    if (!organization?.id) {
+      setReportOrgId(null);
+      return;
+    }
+
+    const resolveReportOrgId = async () => {
+      if (isUuid(organization.id)) {
+        setReportOrgId(organization.id);
+        return;
+      }
+
+      const { data: orgRow, error } = await supabase
+        .from("clerk_organisations")
+        .select("id")
+        .eq("clerk_org_id", organization.id)
+        .maybeSingle();
+
+      if (error || !orgRow?.id) {
+        console.error("Error resolving organization UUID for reports:", error);
+        setReportOrgId(null);
+        return;
+      }
+
+      setReportOrgId(orgRow.id);
+    };
+
+    resolveReportOrgId();
+  }, [organization?.id, supabase]);
+
   // Slug generator
   function generateSlug(name: string): string {
     return name
@@ -51,7 +88,7 @@ export default function SitesPage() {
 
   // Create new site
   const handleCreateReport = async () => {
-    if (!reportName || !siteLocation) return;
+    if (!reportName || !siteLocation || !reportOrgId) return;
 
     setIsCreatingReport(true);
 
@@ -63,7 +100,7 @@ export default function SitesPage() {
           report_name: reportName,
           report_slug: slug,
           report_location: siteLocation,
-          organization_id: organization?.id,
+          organization_id: reportOrgId,
           created_by: session?.user.id,
         },
       ])
@@ -83,13 +120,13 @@ export default function SitesPage() {
 
   // Fetch existing sites
   useEffect(() => {
-    if (!organization?.id || !locationId) return;
+    if (!reportOrgId || !locationId) return;
 
     const fetchReports = async () => {
       const { data, error } = await supabase
         .from("company_reports")
         .select("*")
-        .eq("organization_id", organization.id)
+        .eq("organization_id", reportOrgId)
         .eq("report_location", locationId)
         .order("created_at", { ascending: false });
 
@@ -101,7 +138,7 @@ export default function SitesPage() {
     };
 
     fetchReports();
-  }, [supabase, organization?.id, locationId]);
+  }, [supabase, reportOrgId, locationId]);
 
   return (
     <>

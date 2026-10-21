@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
 import { useUser, useSession, useOrganization } from "@clerk/nextjs";
 import {
@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+//import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { DataTableDemo } from "../../../../components/file-table";
 import { v4 as uuidv4 } from "uuid";
@@ -26,12 +26,32 @@ import {
   CheckCircle,
   XCircle,
 } from "lucide-react";
+import { Progress } from '@/components/ui/progress'
+import { Field, FieldLabel } from "@/components/ui/field";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import ActivityConfigurationModal, {
+  loadActivityConfig,
+  type ActivitySettingsMap,
+} from "@/components/activity-configuration-modal";
+import ActivityProgressTable from "@/components/activity-progress-table";
 
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
     value,
   );
 }
+
+// Placeholder completion percentages keyed by activity type value. Replace
+// with real data once the completion checks are implemented.
+const activityCompletion: Record<string, number> = {};
 
 async function updateUploadState(
   uploadId: string,
@@ -54,12 +74,13 @@ async function updateUploadState(
 }
 
 export default function FileUploader() {
-  const { locationId } = useParams<{ locationId: string }>();
+  const { locationId, slug } = useParams<{ locationId: string; slug: string }>();
   const { user } = useUser();
   const { session } = useSession();
   const { organization } = useOrganization();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [activityConfiguration, setActivityConfiguration] = useState(false);
   const [activityType, setActivityType] = useState<string>("");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -75,6 +96,54 @@ export default function FileUploader() {
     invoiceNumber: "",
     category: "",
   });
+
+  const [requiredActivityValues, setRequiredActivityValues] = useState<
+    string[] | null
+  >(null);
+
+  const supabase = useMemo(
+    () =>
+      createClerkSupabaseClient(
+        () => session?.getToken?.() ?? Promise.resolve(null),
+      ),
+    [session],
+  );
+
+  const toRequiredValues = (settings: ActivitySettingsMap) =>
+    Object.entries(settings)
+      .filter(([, s]) => s.required)
+      .map(([type]) => type);
+
+  useEffect(() => {
+    if (!organization?.id) return;
+    let cancelled = false;
+    loadActivityConfig(supabase, organization.id)
+      .then((config) => {
+        if (!cancelled) setRequiredActivityValues(toRequiredValues(config.settings));
+      })
+      .catch((err) => console.error("Error loading required activities:", err));
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, organization?.id]);
+
+  // function CalculateActivityFileCompletion() {
+  //   //This is severly incomplete i need to ask gpt how we decide how much
+  //   // the completion is calcualted. I was thinking based upon all the moneths of the year had some actvity type file in them
+  //   // then calculate out of 12 months and times a 100 to find percentage.
+  //   // dont solely based on how much data we have from that particular month or year but also from the activity type
+
+  //   const { data: completionData, error } = supabase
+  //     .from("company_raw_uploads")
+  //     .select("activity_type, COUNT(*) as count")
+  //     .eq("organization_id", organization?.id)
+  //     .group("activity_type");
+
+  //   if (error) {
+  //     console.error("Error fetching activity completion data:", error);
+  //     return {};
+  //   }
+  // }
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: (acceptedFiles) => {
@@ -95,13 +164,13 @@ export default function FileUploader() {
     },
   });
 
-  const supabase = useMemo(
-    () =>
-      createClerkSupabaseClient(
-        () => session?.getToken?.() ?? Promise.resolve(null),
-      ),
-    [session],
-  );
+  // const supabase = useMemo(
+  //   () =>
+  //     createClerkSupabaseClient(
+  //       () => session?.getToken?.() ?? Promise.resolve(null),
+  //     ),
+  //   [session],
+  // );
 
   const handleUpload = async () => {
     if (!selectedFile || !user || !session || !organization) return;
@@ -350,6 +419,7 @@ export default function FileUploader() {
     }
   };
 
+  
   //   try {
   //     const res = await fetch(
   //       "https://glowing-parakeet-7jqvjqg9xvpcpg5-8001.app.github.dev/analyze",
@@ -602,65 +672,134 @@ export default function FileUploader() {
         </Dialog>
       )}
 
-      <section className="container mx-auto max-w-xl p-4">
-        <div
-          {...getRootProps()}
-          className={`flex flex-col items-center justify-center border-2 border-dotted rounded-lg bg-gray-100 transition-colors duration-200
-            ${isDragActive ? "border-blue-500 bg-blue-50" : "border-gray-400"}
-            min-h-[180px] w-full cursor-pointer p-6`}
-        >
-          <input {...getInputProps()} />
-          <p className="text-gray-600 text-center">
-            Drag & drop a file here, or click to select one
-          </p>
-        </div>
+      {activityConfiguration && (
+        <ActivityConfigurationModal
+          open={activityConfiguration}
+          setOpen={setActivityConfiguration}
+          onSaved={(settings) =>
+            setRequiredActivityValues(toRequiredValues(settings))
+          }
+        />
+      )}
 
-        <aside className="mt-6">
-          <h4 className="font-semibold mb-2">Files</h4>
-          <ul className="list-disc list-inside text-gray-700">
-            {selectedFile ? (
-              <li>{selectedFile.name}</li>
-            ) : (
-              <li>No files uploaded yet</li>
+      <main className="container mx-auto space-y-8 px-4 py-8">
+        <header className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold">Data Collection</h1>
+            <p className="text-muted-foreground">
+              Upload activity data, track reporting progress and manage your
+              files.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            {uploadStatus === "success" && (
+              <div className="flex items-center gap-2 bg-green-50 px-4 py-2 text-green-700">
+                <CheckCircle className="size-5" />
+                <span className="text-sm font-medium">Upload successful!</span>
+              </div>
             )}
-          </ul>
-        </aside>
-      </section>
-      <section>
-        <div className="container mx-auto py-8">
-          <div className="mb-8">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-bold">File Management</h1>
-                <p className="text-muted-foreground">
-                  Manage and view your uploaded files
-                  {/* Only admins can select and delete files */}
+            {uploadStatus === "error" && (
+              <div className="flex items-center gap-2 bg-red-50 px-4 py-2 text-red-700">
+                <XCircle className="size-5" />
+                <span className="text-sm font-medium">Upload failed</span>
+              </div>
+            )}
+            <Button
+              variant="outline"
+              onClick={() => setActivityConfiguration(true)}
+            >
+              Configure Activity Data
+            </Button>
+          </div>
+        </header>
+
+        <section className="grid gap-6 lg:grid-cols-3">
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle>Current Fiscal Year</CardTitle>
+              <CardDescription>FY2026 files needed</CardDescription>
+              <CardAction>
+                <Button
+                  onClick={() =>
+                    document
+                      .getElementById("activity-progress-table")
+                      ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                  }
+                >
+                  View breakdown
+                </Button>
+              </CardAction>
+            </CardHeader>
+            <CardContent>
+              <Field>
+                <FieldLabel htmlFor="progress-sharp">
+                  <span>FY2026</span>
+                  <span className="ml-auto">80%</span>
+                </FieldLabel>
+                <Progress
+                  value={80}
+                  id="progress-sharp"
+                  className="h-2 rounded-none"
+                />
+              </Field>
+            </CardContent>
+            <CardFooter>
+              <p className="text-muted-foreground">
+                12 of 14 areas completed
+              </p>
+            </CardFooter>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Upload data</CardTitle>
+              <CardDescription>
+                {selectedFile
+                  ? `Selected: ${selectedFile.name}`
+                  : "No file selected yet"}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div
+                {...getRootProps()}
+                className={`flex min-h-[140px] w-full cursor-pointer flex-col items-center justify-center border-2 border-dashed p-6 transition-colors duration-200 ${
+                  isDragActive
+                    ? "border-primary bg-primary/5"
+                    : "border-border bg-muted/40 hover:bg-muted"
+                }`}
+              >
+                <input {...getInputProps()} />
+                <p className="text-center text-sm text-muted-foreground">
+                  Drag & drop a file here, or click to select one
                 </p>
               </div>
-              {uploadStatus === "success" && (
-                <div className="flex items-center gap-2 rounded-lg bg-green-50 px-4 py-2 text-green-700">
-                  <CheckCircle className="size-5" />
-                  <span className="text-sm font-medium">
-                    Upload successful!
-                  </span>
-                </div>
-              )}
-              {uploadStatus === "error" && (
-                <div className="flex items-center gap-2 rounded-lg bg-red-50 px-4 py-2 text-red-700">
-                  <XCircle className="size-5" />
-                  <span className="text-sm font-medium">Upload failed</span>
-                </div>
-              )}
-            </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        <section className="space-y-4">
+          <div>
+            <h2 className="text-xl font-semibold">File Management</h2>
+            <p className="text-sm text-muted-foreground">
+              Manage and view your uploaded files
+            </p>
           </div>
-          {/* Replace "your_table_name" with your actual Supabase table name */}
           <DataTableDemo
             key={refreshTrigger}
             organizationId={organization?.id ?? ""}
             locationId={locationId}
           />
-        </div>
-      </section>
+        </section>
+
+        <section>
+          <ActivityProgressTable
+            id="activity-progress-table"
+            slug={slug}
+            completion={activityCompletion}
+            requiredActivityValues={requiredActivityValues ?? []}
+          />
+        </section>
+      </main>
     </>
   );
 }

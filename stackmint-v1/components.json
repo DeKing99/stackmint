@@ -1,6 +1,6 @@
 {
   "$schema": "https://ui.shadcn.com/schema.json",
-  "style": "new-york",
+  "style": "radix-sera",
   "rsc": true,
   "tsx": true,
   "tailwind": {
@@ -17,5 +17,15 @@
     "lib": "@/lib",
     "hooks": "@/hooks"
   },
-  "iconLibrary": "lucide"
+  "iconLibrary": "lucide",
+  "rtl": false,
+  "menuColor": "default",
+  "menuAccent": "subtle",
+  "registries": {
+    "@shadcn-studio": "https://shadcnstudio.com/r/{style}/{name}.json",
+    "@ss-components": "https://shadcnstudio.com/r/components/{style}/{name}.json",
+    "@ss-blocks": "https://shadcnstudio.com/r/blocks/{style}/{name}.json",
+    "@ss-pages": "https://shadcnstudio.com/r/pages/{style}/{name}.json",
+    "@ss-themes": "https://shadcnstudio.com/r/themes/{name}.json"
+  }
 }

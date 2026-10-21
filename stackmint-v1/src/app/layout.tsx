@@ -1,15 +1,17 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
-import { Inter, IBM_Plex_Mono } from "next/font/google";
+import { Inter, IBM_Plex_Mono, Geist } from "next/font/google";
+import { cn } from "@/lib/utils";
+import { TooltipProvider } from "@/components/ui/tooltip";
+
+const interHeading = Inter({subsets:['latin'],variable:'--font-heading'});
+
+
 //import { Analytics } from "@vercel/analytics/next";
 //import { FilePreviewer } from "@/components/file-previewer";
 //import { SupabaseProvider } from "./providers/supabase-provider";
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-sans",
-  display: "swap",
-});
+const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
 const ibmPlexMono = IBM_Plex_Mono({
   weight: ["400", "500", "600"],
@@ -29,9 +31,9 @@ export default function RootLayout({
 }>) {
   return (
     <ClerkProvider>
-      <html lang="en">
-        <body className={`${inter.variable} ${ibmPlexMono.variable} font-sans antialiased`}>
-          <main className="p-4">{children}</main>
+      <html lang="en" className={cn("font-sans", geist.variable, interHeading.variable)}>
+        <body className={`${geist.variable} ${ibmPlexMono.variable} font-sans antialiased`}>
+          <main className="p-4"><TooltipProvider>{children}</TooltipProvider></main>
         </body>
       </html>
     </ClerkProvider>
