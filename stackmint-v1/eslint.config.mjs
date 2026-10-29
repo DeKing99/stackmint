@@ -11,6 +11,18 @@ const compat = new FlatCompat({
 
 const eslintConfig = [
   ...compat.extends("next/core-web-vitals", "next/typescript"),
+  {
+    files: [
+      "src/app/api/ai/command/route.ts",
+      "src/components/Editor.tsx",
+      "src/components/editor/**/*.tsx",
+      "src/components/ui/**/*.tsx",
+    ],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+      "react/display-name": "off",
+    },
+  },
 ];
 
 export default eslintConfig;

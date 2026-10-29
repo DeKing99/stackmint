@@ -24,10 +24,13 @@ export async function POST(req: NextRequest) {
   const openai = createOpenAI({ apiKey });
 
   try {
+    const languageModel =
+      openai(model) as unknown as Parameters<typeof generateText>[0]["model"];
+
     const result = await generateText({
       abortSignal: req.signal,
-      maxTokens: 50,
-      model: openai(model),
+      maxOutputTokens: 50,
+      model: languageModel,
       prompt: prompt,
       system,
       temperature: 0.7,

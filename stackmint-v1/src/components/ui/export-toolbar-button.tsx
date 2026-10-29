@@ -20,9 +20,6 @@ import { ToolbarButton } from "./toolbar";
 
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
-import { constant } from "lodash";
-import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
 
 const siteUrl = "https://platejs.org";
 

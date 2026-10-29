@@ -8,7 +8,7 @@ import { getCommentKey, getTransientCommentKey } from '@platejs/comment';
 import { deserializeMd } from '@platejs/markdown';
 import { type UIMessage } from 'ai';
 import { type TNode, KEYS, nanoid, NodeApi, TextApi } from 'platejs';
-import { type PlateEditor, useEditorRef, usePluginOption } from 'platejs/react';
+import { useEditorRef, usePluginOption } from 'platejs/react';
 
 import { aiChatPlugin } from '@/components/editor/plugins/ai-kit';
 import { discussionPlugin } from './plugins/discussion-kit';
@@ -28,10 +28,15 @@ export type MessageDataPart = {
 
 export type Chat = UseChatHelpers;
 export type ChatMessage = UIMessage;
+type StreamMessageData = {
+  type: 'data-toolName' | 'data-comment';
+  data?: ToolName | TComment;
+};
 
 export const useChat = () => {
   const editor = useEditorRef();
   const options = usePluginOption(aiChatPlugin, 'chatOptions');
+  const { api: _api, ...chatOptions } = options ?? {};
 
   const baseChat = useBaseChat({
     id: 'editor',
@@ -49,16 +54,16 @@ export const useChat = () => {
       // Expect the AI to return structured JSON in `message.data`
       // Example: { type: "data-comment", data: { comment: "...", content: "..." } }
       try {
-        const parsed = message.data as { type: string; data?: any };
+        const parsed = message.data as StreamMessageData | undefined;
 
         if (!parsed) return;
 
         if (parsed.type === 'data-toolName') {
-          editor.setOption(AIChatPlugin, 'toolName', parsed.data);
+          editor.setOption(AIChatPlugin, 'toolName', parsed.data as ToolName);
         }
 
         if (parsed.type === 'data-comment' && parsed.data) {
-          const aiComment = parsed.data;
+          const aiComment = parsed.data as TComment;
           const range = aiCommentToRange(editor, aiComment);
 
           if (!range) {
@@ -116,7 +121,7 @@ export const useChat = () => {
       }
     },
 
-    ...options,
+    ...chatOptions,
   });
 
   const chat = { ...baseChat };

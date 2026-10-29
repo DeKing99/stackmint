@@ -1,0 +1,403 @@
+sector_code,sector_name,factor_value,currency_code,factor_unit
+1111A0/US,"Fresh soybeans, canola, flaxseeds, and other oilseeds",1.47506458825563,USD,kgco2e_per_usd
+1111B0/US,"Fresh wheat, corn, rice, and other grains",3.722832904333555,USD,kgco2e_per_usd
+111200/US,"Fresh vegetables, melons, and potatoes",1.792857280564077,USD,kgco2e_per_usd
+111300/US,Fresh fruits and tree nuts,0.8993545898957892,USD,kgco2e_per_usd
+111400/US,"Greenhouse crops, mushrooms, nurseries, and flowers",1.185348960020039,USD,kgco2e_per_usd
+111900/US,"Tobacco, cotton, sugarcane, peanuts, sugar beets, herbs and spices, and other crops",2.294221649559021,USD,kgco2e_per_usd
+112120/US,Dairies,3.31313763692036,USD,kgco2e_per_usd
+1121A0/US,Cattle ranches and feedlots,3.95561559954357,USD,kgco2e_per_usd
+112300/US,Poultry farms,1.075826765441325,USD,kgco2e_per_usd
+112A00/US,Animal farms and aquaculture ponds (except cattle and poultry),1.840515604887979,USD,kgco2e_per_usd
+113000/US,Timber and raw forest products,0.3411701179318647,USD,kgco2e_per_usd
+114000/US,Wild-caught fish and game,0.2143490036970762,USD,kgco2e_per_usd
+115000/US,Agriculture and forestry support,0.4529131016935156,USD,kgco2e_per_usd
+211000/US,Unrefined oil and gas,0.8358351103378575,USD,kgco2e_per_usd
+212100/US,Coal,2.189889632851145,USD,kgco2e_per_usd
+212230/US,"Copper, nickel, lead, and zinc",0.493800329654601,USD,kgco2e_per_usd
+2122A0/US,"Iron, gold, silver, and other metal ores",1.026681950791458,USD,kgco2e_per_usd
+212310/US,Dimensional stone,0.3727838241413211,USD,kgco2e_per_usd
+2123A0/US,"Sand, gravel, clay, phosphate, other nonmetallic minerals",0.4197031711110281,USD,kgco2e_per_usd
+213111/US,Well drilling,0.3700629934875859,USD,kgco2e_per_usd
+21311A/US,Other support activities for mining,0.4440460576495168,USD,kgco2e_per_usd
+221100/US,Electricity,3.441131169656384,USD,kgco2e_per_usd
+221200/US,Natural gas,0.7826522559458505,USD,kgco2e_per_usd
+221300/US,Drinking water and wastewater treatment,0.7040561675985595,USD,kgco2e_per_usd
+233210/US,Health care buildings,0.2676191833007086,USD,kgco2e_per_usd
+233262/US,Schools and vocational buildings,0.286646698356087,USD,kgco2e_per_usd
+230301/US,Nonresidential building repair and maintanence,0.3161726294135621,USD,kgco2e_per_usd
+230302/US,Residential building repair and maintanence,0.2818771083634583,USD,kgco2e_per_usd
+2332A0/US,"Commercial structures, including farm structures",0.3257581920141063,USD,kgco2e_per_usd
+233412/US,Multifamily homes,0.2748008717300612,USD,kgco2e_per_usd
+2334A0/US,Other residential structures,0.3377666238846886,USD,kgco2e_per_usd
+233230/US,Manufacturing buildings,0.3195115596586025,USD,kgco2e_per_usd
+2332D0/US,Other nonresidential structures,0.2708648215503984,USD,kgco2e_per_usd
+233240/US,Utilities buildings and infrastructure,0.337526471036412,USD,kgco2e_per_usd
+233411/US,Single-family homes,0.2815828221529956,USD,kgco2e_per_usd
+2332C0/US,"Highways, streets, and bridges",0.3354437551276153,USD,kgco2e_per_usd
+321100/US,Lumber and treated lumber,0.3756790099682002,USD,kgco2e_per_usd
+321200/US,Plywood and veneer,0.5493186768099384,USD,kgco2e_per_usd
+321910/US,"Wooden windows, door, and flooring",0.2999132838722228,USD,kgco2e_per_usd
+3219A0/US,"Veneer, plywood, and engineered wood",0.3473969812895256,USD,kgco2e_per_usd
+327100/US,Clay and ceramic products,0.8175902221327326,USD,kgco2e_per_usd
+327200/US,Glass and glass products,1.106310696041274,USD,kgco2e_per_usd
+327310/US,Cement,6.988305852431644,USD,kgco2e_per_usd
+327320/US,Ready-mix concrete,1.404104579507345,USD,kgco2e_per_usd
+327330/US,"Concrete pipe, bricks, and blocks",0.7031557145276971,USD,kgco2e_per_usd
+327390/US,Other concrete products,0.5520593684298417,USD,kgco2e_per_usd
+327400/US,Lime and gypsum products,3.497836944177933,USD,kgco2e_per_usd
+327910/US,Abrasive products,0.2412780529827803,USD,kgco2e_per_usd
+327991/US,Cut stone and stone products,0.3141942702218868,USD,kgco2e_per_usd
+327992/US,Ground or treated minerals and earth,0.6114679756287623,USD,kgco2e_per_usd
+327993/US,Mineral wool,0.7015917980673445,USD,kgco2e_per_usd
+327999/US,Other nonmetallic mineral products,1.124235538647389,USD,kgco2e_per_usd
+331110/US,"Primary iron, steel, and ferroalloy products",1.615463236674653,USD,kgco2e_per_usd
+331200/US,Secondary steel products,0.7499299509235408,USD,kgco2e_per_usd
+331313/US,Primary aluminum,2.610529159823668,USD,kgco2e_per_usd
+33131B/US,Secondary aluminum,1.215123237807115,USD,kgco2e_per_usd
+331410/US,"Copper, gold and silver concentrates",0.7981971708497867,USD,kgco2e_per_usd
+331420/US,Secondary copper products,0.925132738204513,USD,kgco2e_per_usd
+331490/US,Other secondary nonferrous metal products,0.862430001803122,USD,kgco2e_per_usd
+331510/US,Cast iron and steel,0.5916706015682394,USD,kgco2e_per_usd
+331520/US,Nonferrous metal casts,0.6932059220587278,USD,kgco2e_per_usd
+332114/US,Custom metal rolls,0.8265176878601248,USD,kgco2e_per_usd
+33211A/US,"All other forging, stamping, and sintering",0.6816877674017535,USD,kgco2e_per_usd
+332119/US,"Lids, jars, bottle caps, other metal closures and crowns",0.5428634841101208,USD,kgco2e_per_usd
+332200/US,Cutlery and handtools,0.4209128267054371,USD,kgco2e_per_usd
+332310/US,Metal structural products,0.5780920912122667,USD,kgco2e_per_usd
+332320/US,"Metal windows, doors, and architectural products",0.524926320257773,USD,kgco2e_per_usd
+332410/US,Power boilers and heat exchangers,0.4454958076011183,USD,kgco2e_per_usd
+332420/US,Heavy gauge metal tanks,0.4915909969301914,USD,kgco2e_per_usd
+332430/US,"Light gauge metal cans, boxes, and containers",0.6305552066480999,USD,kgco2e_per_usd
+332500/US,"Metal hinges, keys, lock, and other hardware",0.4366977996519167,USD,kgco2e_per_usd
+332600/US,Springs and wires,0.4597892279563049,USD,kgco2e_per_usd
+332710/US,Machine shops,0.3192628486960383,USD,kgco2e_per_usd
+332720/US,"Screws, nuts, and bolts",0.428257054486998,USD,kgco2e_per_usd
+332800/US,"Metal coatings, engravings, and heat treatments",0.4679963756672764,USD,kgco2e_per_usd
+332913/US,"Metal plumbing drains, faucets, valves, and other fittings",0.4179792056490195,USD,kgco2e_per_usd
+33291A/US,Valve and fittings (except for plumbing),0.2991102849360345,USD,kgco2e_per_usd
+332991/US,Ball and roller bearings,0.303048718986566,USD,kgco2e_per_usd
+332996/US,Fabricated pipe and pipe fittings,0.424269127161808,USD,kgco2e_per_usd
+33299A/US,"Ammunition, arms, ordnance, and related accessories",0.2819404381477501,USD,kgco2e_per_usd
+332999/US,Misc. fabricated metal products,0.5161593835787663,USD,kgco2e_per_usd
+333111/US,Farm machinery and equipment,0.3598302243008629,USD,kgco2e_per_usd
+333112/US,Lawn and garden equipment,0.2819322556403385,USD,kgco2e_per_usd
+333120/US,Construction machinery,0.3440264221117534,USD,kgco2e_per_usd
+333130/US,Mining and oil/gas field machinery,0.403854531001118,USD,kgco2e_per_usd
+333242/US,Semiconductor machinery,0.2045298752652031,USD,kgco2e_per_usd
+33329A/US,"Machinery for the paper, textile, food or other industries (except semiconductor machinery)",0.2887940056415014,USD,kgco2e_per_usd
+333314/US,Optical instruments and lenses,0.231975821925404,USD,kgco2e_per_usd
+333316/US,Photography and photocopying equipment,0.2188083130785319,USD,kgco2e_per_usd
+333318/US,Other commercial and service industry machinery,0.3245823780783534,USD,kgco2e_per_usd
+333414/US,Heating equipment other than warm air furnaces,0.3876903776642486,USD,kgco2e_per_usd
+333415/US,"Air conditioning, refrigeration, and warm air heating equipment",0.4451121197557807,USD,kgco2e_per_usd
+333413/US,Air purification and ventilation equipment,0.3581880368986956,USD,kgco2e_per_usd
+333511/US,Industrial molds,0.3265716283389963,USD,kgco2e_per_usd
+333514/US,"Special tools, dies, jigs, and fixtures",0.2915718252807052,USD,kgco2e_per_usd
+333517/US,Metal cutting and forming machine tools,0.2574540612363938,USD,kgco2e_per_usd
+33351B/US,"Cutting and machine tool accessory, rolling mill, and other metalworking machines",0.2856075417367565,USD,kgco2e_per_usd
+333611/US,Turbines and turbine generator sets,0.2688369750488627,USD,kgco2e_per_usd
+333612/US,"Speed changers, industrial high-speed drives, and gears",0.2539064316819026,USD,kgco2e_per_usd
+333613/US,Mechanical power transmission equipment,0.3265405511276459,USD,kgco2e_per_usd
+333618/US,Other engine equipment,0.3992032352969316,USD,kgco2e_per_usd
+333912/US,Air and gas compressors,0.3031641937186897,USD,kgco2e_per_usd
+333914/US,Pumps and pumping equipment,0.2898920660652641,USD,kgco2e_per_usd
+333920/US,Material handling equipment,0.3894726382195938,USD,kgco2e_per_usd
+333991/US,Power tools,0.3064903145811025,USD,kgco2e_per_usd
+333993/US,Packaging machinery,0.1854639268643942,USD,kgco2e_per_usd
+333994/US,Industrial process furnaces and ovens,0.2792444891860499,USD,kgco2e_per_usd
+33399A/US,"Welding and Soldering Equipment, Scales and Balances, and other general purpose machinery",0.3442558855919666,USD,kgco2e_per_usd
+33399B/US,"Hydraulic pumps, motors, cylinders and actuators",0.2996822276107972,USD,kgco2e_per_usd
+334111/US,Computers,0.04998511892032928,USD,kgco2e_per_usd
+334112/US,Computer storage device readers,0.07749737863341723,USD,kgco2e_per_usd
+334118/US,Computer terminals and other computer peripheral equipment,0.1753824825609228,USD,kgco2e_per_usd
+334210/US,Telephones,0.1037070760480744,USD,kgco2e_per_usd
+334220/US,Wireless communications,0.09778656816539127,USD,kgco2e_per_usd
+334290/US,Communications equipment,0.09012098596683783,USD,kgco2e_per_usd
+334413/US,Semiconductors,0.2307881768392851,USD,kgco2e_per_usd
+334418/US,Printed circuit and electronic assembly,0.1068513033991329,USD,kgco2e_per_usd
+33441A/US,"Electronic capacitors, resistors, coils, transformers, connectors and other components (except  semiconductors and printed circuit assemblies)",0.138158756971462,USD,kgco2e_per_usd
+334510/US,Electromedical appartuses,0.1444237905602317,USD,kgco2e_per_usd
+334511/US,Navigation instruments,0.105019835990918,USD,kgco2e_per_usd
+334512/US,Automatic controls for HVAC and refrigeration equipment,0.08909019757069521,USD,kgco2e_per_usd
+334513/US,Industrial process variable instruments,0.08101170168568152,USD,kgco2e_per_usd
+334514/US,Fluid meters and counting devices,0.1296886015330359,USD,kgco2e_per_usd
+334515/US,Signal testing instruments,0.09358862402623397,USD,kgco2e_per_usd
+334516/US,Analytical laboratory instruments,0.1300691092773578,USD,kgco2e_per_usd
+334517/US,Irradiation apparatuses,0.1280970539953269,USD,kgco2e_per_usd
+33451A/US,"Watches, clocks, and other measuring and controlling devices",0.1152520853322771,USD,kgco2e_per_usd
+334300/US,Audio and video equipment,0.101258045280035,USD,kgco2e_per_usd
+334610/US,"External hard drives, CDs, other storage media",0.05958509291355334,USD,kgco2e_per_usd
+335110/US,Light bulbs,0.1883909966531386,USD,kgco2e_per_usd
+335120/US,Light fixtures,0.3103272357502713,USD,kgco2e_per_usd
+335210/US,Small electrical appliances,0.2162963924760672,USD,kgco2e_per_usd
+335220/US,Major home appliances,0.3168064100037465,USD,kgco2e_per_usd
+335311/US,Specialty transformers,0.3370928005030754,USD,kgco2e_per_usd
+335312/US,Motors and generators,0.2729621215192941,USD,kgco2e_per_usd
+335313/US,Switchgear and switchboards,0.3396669092127156,USD,kgco2e_per_usd
+335314/US,Relay and industrial controls,0.2103064958829341,USD,kgco2e_per_usd
+335911/US,Storage batteries,0.6711997207899264,USD,kgco2e_per_usd
+335912/US,Primary batteries,0.195967382352196,USD,kgco2e_per_usd
+335920/US,Communication and energy wire and cable,0.5774092313484936,USD,kgco2e_per_usd
+335930/US,Wiring devices,0.2771427852928021,USD,kgco2e_per_usd
+335991/US,Carbon and graphite products,0.5252675414604204,USD,kgco2e_per_usd
+335999/US,Other miscellaneous electrical equipment and components,0.2296242889487997,USD,kgco2e_per_usd
+336111/US,Automobiles,0.3645565009718055,USD,kgco2e_per_usd
+336112/US,"Pickup trucks, vans, and SUVs",0.3412125414787051,USD,kgco2e_per_usd
+336120/US,Heavy duty trucks,0.3192487966316057,USD,kgco2e_per_usd
+336211/US,Vehicle bodies,0.4068473924252921,USD,kgco2e_per_usd
+336212/US,Truck trailers,0.4381304102405899,USD,kgco2e_per_usd
+336213/US,Motor homes,0.1432738661838002,USD,kgco2e_per_usd
+336214/US,Travel trailer and campers,0.322872942262494,USD,kgco2e_per_usd
+336310/US,Vehicle engines and engine parts,0.3517874794070694,USD,kgco2e_per_usd
+336320/US,Vehicle electrical and electronic equipment,0.3262122585904665,USD,kgco2e_per_usd
+336350/US,Transmission and power train parts,0.3479274347865995,USD,kgco2e_per_usd
+336360/US,Vehicle seating and interior trim (upholstery),0.3646794937181613,USD,kgco2e_per_usd
+336370/US,Vehicle metal stamping,0.6473748015984149,USD,kgco2e_per_usd
+336390/US,Other vehicle parts,0.3774572897468168,USD,kgco2e_per_usd
+3363A0/US,"Motor vehicle steering, suspension components (except spring), and brake systems",0.4280596770936676,USD,kgco2e_per_usd
+336411/US,Aircraft,0.1845409816637458,USD,kgco2e_per_usd
+336412/US,Aircraft engines and parts,0.1851051709141941,USD,kgco2e_per_usd
+336413/US,Other aircraft parts,0.2036034982105373,USD,kgco2e_per_usd
+336414/US,Guided missiles and space vehicles,0.1727320450300678,USD,kgco2e_per_usd
+33641A/US,Propulsion units and parts for space vehicles and guided missiles,0.3431744712041196,USD,kgco2e_per_usd
+336500/US,Railroad rolling stock,0.5274985665649428,USD,kgco2e_per_usd
+336611/US,Ships and ship repair,0.2257645888249323,USD,kgco2e_per_usd
+336612/US,Boats,0.3549647629231849,USD,kgco2e_per_usd
+336991/US,"Motorcycle, bicycle, and parts",0.3552925381112212,USD,kgco2e_per_usd
+336992/US,Military armored vehicles and tanks,0.5216753137817666,USD,kgco2e_per_usd
+336999/US,Other transportation equipment,0.3460424274914239,USD,kgco2e_per_usd
+337110/US,Wood kitchen cabinets and countertops,0.2721085354910415,USD,kgco2e_per_usd
+337121/US,Home furniture - upholstered,0.3552030543939145,USD,kgco2e_per_usd
+337122/US,"Home furniture - wood, nonupholstered",0.29830921623541,USD,kgco2e_per_usd
+337127/US,Institutional furniture,0.3731811365066942,USD,kgco2e_per_usd
+33712N/US,"Home furniture - Cabinets and non-wood, nonupholstered",0.5047539278336971,USD,kgco2e_per_usd
+337215/US,Shelving and lockers,0.4395602210630132,USD,kgco2e_per_usd
+33721A/US,Office furniture and custom architectural woodwork and millwork,0.3376018706419759,USD,kgco2e_per_usd
+337900/US,"Mattresses, blinds and shades",0.416908714151849,USD,kgco2e_per_usd
+339112/US,Surgical and medical instruments,0.1768287071664019,USD,kgco2e_per_usd
+339113/US,Surgical appliance and supplies,0.1850833337259997,USD,kgco2e_per_usd
+339114/US,Dental equipment and supplies,0.2865740039776745,USD,kgco2e_per_usd
+339115/US,Ophthalmic goods,0.1884997653363336,USD,kgco2e_per_usd
+339116/US,Dental laboratories,0.2140909499124883,USD,kgco2e_per_usd
+339910/US,Jewelry and silverware,0.2212250575191908,USD,kgco2e_per_usd
+339920/US,Sporting and athletic goods,0.2987621845207945,USD,kgco2e_per_usd
+339930/US,"Dolls, toys, and games",0.251281427791692,USD,kgco2e_per_usd
+339940/US,Office supplies (not paper),0.3689476981276405,USD,kgco2e_per_usd
+339950/US,Signs,0.3362299723882261,USD,kgco2e_per_usd
+339990/US,"Gaskets, seals, musical instruments, fasteners, brooms, brushes, mop and other misc. goods",0.329822203333247,USD,kgco2e_per_usd
+311111/US,Dog and cat food,0.8900293648377897,USD,kgco2e_per_usd
+311119/US,Other animal food,1.308506698562204,USD,kgco2e_per_usd
+311210/US,Flours and malts,1.634457699876758,USD,kgco2e_per_usd
+311221/US,Corn products,2.075395205620771,USD,kgco2e_per_usd
+311225/US,"Refined vegetable, olive, and seed oils",0.9535953136497786,USD,kgco2e_per_usd
+311224/US,Vegetable oils and by-products,1.026953275910374,USD,kgco2e_per_usd
+311230/US,Breakfast cereals,0.9913291312288119,USD,kgco2e_per_usd
+311300/US,"Sugar, candy, and chocolate",0.8815616960541742,USD,kgco2e_per_usd
+311410/US,Frozen food,0.956363825844051,USD,kgco2e_per_usd
+311420/US,Fruit and vegetable preservation,0.7754407092367093,USD,kgco2e_per_usd
+311513/US,Cheese,1.703365092485016,USD,kgco2e_per_usd
+311514/US,"Dry, condensed, and evaporated dairy",1.308213552791337,USD,kgco2e_per_usd
+31151A/US,Fluid milk and butter,1.588428422751911,USD,kgco2e_per_usd
+311520/US,Ice cream and frozen desserts,0.8984019685255582,USD,kgco2e_per_usd
+311615/US,Packaged poultry,0.7625968404175815,USD,kgco2e_per_usd
+31161A/US,Packaged meat (except poultry),2.095292900252675,USD,kgco2e_per_usd
+311700/US,Seafood,0.876120318384131,USD,kgco2e_per_usd
+311810/US,Bread and other baked goods,0.5395819542056073,USD,kgco2e_per_usd
+3118A0/US,"Cookies, crackers, pastas, and tortillas",0.7337958582415223,USD,kgco2e_per_usd
+311910/US,Snack foods,0.674785312869377,USD,kgco2e_per_usd
+311920/US,Coffee and tea,0.636828897777406,USD,kgco2e_per_usd
+311930/US,Flavored drink concentrates,0.3806961162763766,USD,kgco2e_per_usd
+311940/US,Seasonings and dressings,0.6564600176883019,USD,kgco2e_per_usd
+311990/US,All other foods,1.064164525284226,USD,kgco2e_per_usd
+312110/US,"Soft drinks, bottled water, and ice",0.4613620690549866,USD,kgco2e_per_usd
+312120/US,Breweries and beer,0.551337736994288,USD,kgco2e_per_usd
+312130/US,Wineries and wine,0.3448261468180901,USD,kgco2e_per_usd
+312140/US,Distilleries and spirits,0.5936622182350333,USD,kgco2e_per_usd
+312200/US,Tobacco products,0.1721138573853343,USD,kgco2e_per_usd
+313100/US,"Fiber, yarn, and thread",1.065172816228133,USD,kgco2e_per_usd
+313200/US,Fabric,0.7055104381150507,USD,kgco2e_per_usd
+313300/US,Finished and coated fabric,0.6343695318884816,USD,kgco2e_per_usd
+314110/US,Carpets and rugs,0.5951606465032976,USD,kgco2e_per_usd
+314120/US,Curtains and linens,0.436068733997569,USD,kgco2e_per_usd
+314900/US,Other textiles,0.4374532780599757,USD,kgco2e_per_usd
+315000/US,Clothing,0.1398179757287818,USD,kgco2e_per_usd
+316000/US,Leather,0.4831247465700025,USD,kgco2e_per_usd
+322110/US,Wood pulp,1.457676180617631,USD,kgco2e_per_usd
+322120/US,Paper,1.245452532734796,USD,kgco2e_per_usd
+322130/US,Cardboard,1.679312401012547,USD,kgco2e_per_usd
+322210/US,Cardboard containers,0.7862260886867024,USD,kgco2e_per_usd
+322220/US,Paper bags and coated paper,0.5707763228578121,USD,kgco2e_per_usd
+322230/US,Stationery,0.7339981257944387,USD,kgco2e_per_usd
+322291/US,"Sanitary paper (tissues, napkins, diapers, etc.)",0.8871783547926526,USD,kgco2e_per_usd
+322299/US,All other converted paper products,0.6753098097846342,USD,kgco2e_per_usd
+323110/US,"Books, newspapers, magazines, and other print media",0.3352372296594377,USD,kgco2e_per_usd
+323120/US,Printing support,0.2624855910844411,USD,kgco2e_per_usd
+324110/US,"Gasoline, fuels, and by-products of petroleum refining",0.9171408720145141,USD,kgco2e_per_usd
+324121/US,Asphalt pavement,2.000762750581782,USD,kgco2e_per_usd
+324122/US,Asphalt shingles,1.080957640929243,USD,kgco2e_per_usd
+324190/US,Other petroleum and coal products,1.227470562458274,USD,kgco2e_per_usd
+325110/US,Petrochemicals,1.90966537285243,USD,kgco2e_per_usd
+325120/US,Compressed Gases,2.516658506439538,USD,kgco2e_per_usd
+325130/US,Synthetic dyes and pigments,0.6282140745589213,USD,kgco2e_per_usd
+325180/US,Other basic inorganic chemicals,1.820891508901417,USD,kgco2e_per_usd
+325190/US,Other basic organic chemicals,2.045786487021691,USD,kgco2e_per_usd
+325211/US,Plastics,1.615292607340901,USD,kgco2e_per_usd
+3252A0/US,Synthetic rubber and artificial and synthetic fibers,1.245656983587108,USD,kgco2e_per_usd
+325411/US,Medicinal and botanical ingredients,0.2374657960550419,USD,kgco2e_per_usd
+325412/US,"Pharmaceutical products (pills, powders, solutions, etc.)",0.100056166822997,USD,kgco2e_per_usd
+325413/US,"Blood sugar, pregnancy, and other diagnostic test kits",0.1958707212169338,USD,kgco2e_per_usd
+325414/US,Vaccines and other biological medical products,0.1757056813036509,USD,kgco2e_per_usd
+325310/US,Fertilizers,4.134417085533708,USD,kgco2e_per_usd
+325320/US,Pesticides,1.007120599351309,USD,kgco2e_per_usd
+325510/US,Paints and coatings,0.5764486338497813,USD,kgco2e_per_usd
+325520/US,Adhesives,0.7332043585240402,USD,kgco2e_per_usd
+325610/US,Soap and cleaning compounds,0.6409808657400424,USD,kgco2e_per_usd
+325620/US,Toiletries,0.2970074566866176,USD,kgco2e_per_usd
+325910/US,Ink and ink cartridges,0.5246730655216157,USD,kgco2e_per_usd
+3259A0/US,"Chemicals (except basic chemicals, agrichemicals, polymers, paints, pharmaceuticals,soaps, cleaning compounds)",0.7089005103601151,USD,kgco2e_per_usd
+326110/US,"Plastic bags, films, and sheets",0.7901848715797192,USD,kgco2e_per_usd
+326120/US,"Plastic pipe, fittings, and sausage casings",0.7218284190610661,USD,kgco2e_per_usd
+326130/US,Laminated plastic plates and shapes,0.5968314421928061,USD,kgco2e_per_usd
+326140/US,Polystyrene foam products,0.7994069421636584,USD,kgco2e_per_usd
+326150/US,Urethane and other foam products,0.7497706911539488,USD,kgco2e_per_usd
+326160/US,Plastic bottles,0.8146622070749369,USD,kgco2e_per_usd
+326190/US,Other plastic products,0.6176642666770634,USD,kgco2e_per_usd
+326210/US,Rubber tires,0.6094825572295149,USD,kgco2e_per_usd
+326220/US,Rubber and plastic belts and hoses,0.4465754855189692,USD,kgco2e_per_usd
+326290/US,Other rubber products,0.5452781659565139,USD,kgco2e_per_usd
+423100/US,Motor vehicle and motor vehicle parts and supplies,0.1562140509010737,USD,kgco2e_per_usd
+423400/US,Professional and commercial equipment and supplies,0.08680406876950161,USD,kgco2e_per_usd
+423600/US,Household appliances and electrical and electronic goods,0.1177795406373108,USD,kgco2e_per_usd
+423800/US,"Machinery, equipment, and supplies",0.1527580632393734,USD,kgco2e_per_usd
+423A00/US,Other durable goods merchant wholesalers,0.1537326127339224,USD,kgco2e_per_usd
+424200/US,Drugs and druggists sundries,0.1246461149170367,USD,kgco2e_per_usd
+424400/US,Grocery and related product wholesalers,0.1917228102491856,USD,kgco2e_per_usd
+424700/US,Petroleum and petroleum products,0.1122533011015201,USD,kgco2e_per_usd
+424A00/US,Other nondurable goods merchant wholesalers,0.1616728155615674,USD,kgco2e_per_usd
+425000/US,Wholesale electronic markets and agents and brokers,0.1129608325002551,USD,kgco2e_per_usd
+4200ID/US,Customs duties,0.0,USD,kgco2e_per_usd
+441000/US,Vehicles and parts sales,0.1295720981939062,USD,kgco2e_per_usd
+445000/US,Food and beverage stores,0.2292747174435403,USD,kgco2e_per_usd
+452000/US,General merchandise stores,0.2011333520177264,USD,kgco2e_per_usd
+444000/US,Building material and garden equipment and supplies dealers,0.1347041412631111,USD,kgco2e_per_usd
+446000/US,Health and personal care stores,0.1364237224279161,USD,kgco2e_per_usd
+447000/US,Gasoline stations,0.2731114726400957,USD,kgco2e_per_usd
+448000/US,Clothing and clothing accessories stores,0.1515411797386268,USD,kgco2e_per_usd
+454000/US,Nonstore retailers,0.1073532812192394,USD,kgco2e_per_usd
+4B0000/US,Other retail,0.1280820837890462,USD,kgco2e_per_usd
+481000/US,Air transport,0.760363267004879,USD,kgco2e_per_usd
+482000/US,Rail transport,0.5616144656427602,USD,kgco2e_per_usd
+483000/US,"Water transport (boats, ships, ferries)",0.9380433177447248,USD,kgco2e_per_usd
+484000/US,Truck transport,0.8606978976823281,USD,kgco2e_per_usd
+485000/US,Passenger ground transport,0.5638192180023799,USD,kgco2e_per_usd
+486000/US,Pipeline transport,2.165237174845453,USD,kgco2e_per_usd
+48A000/US,Scenic and sightseeing transportation and support activities for transportation,0.2172012076115404,USD,kgco2e_per_usd
+492000/US,Couriers and messengers,0.4119031540936405,USD,kgco2e_per_usd
+493000/US,Warehousing,0.3054109286435125,USD,kgco2e_per_usd
+511110/US,Newspapers,0.07726492044869818,USD,kgco2e_per_usd
+511120/US,Magazines and journals,0.08609922071704453,USD,kgco2e_per_usd
+511130/US,Books,0.1224313551560481,USD,kgco2e_per_usd
+5111A0/US,"Directory, mailing list, and other publishers",0.1013542858575281,USD,kgco2e_per_usd
+511200/US,Software,0.0510508383887503,USD,kgco2e_per_usd
+512100/US,Movies and film,0.05402334307743237,USD,kgco2e_per_usd
+512200/US,Sound recording,0.02813057910704108,USD,kgco2e_per_usd
+515100/US,Radio and television,0.08935929856718328,USD,kgco2e_per_usd
+515200/US,Cable and subscription programming,0.109095441210092,USD,kgco2e_per_usd
+517110/US,Telecommunications,0.09434947527643592,USD,kgco2e_per_usd
+517210/US,Wireless telecommunications,0.1053216146516518,USD,kgco2e_per_usd
+517A00/US,"Satellite, telecommunications resellers, and all other telecommunications",0.09197417340069387,USD,kgco2e_per_usd
+518200/US,Data processing and hosting,0.09535753639974179,USD,kgco2e_per_usd
+519130/US,Internet publishing and broadcasting,0.07197064106196757,USD,kgco2e_per_usd
+5191A0/US,"News syndicates, libraries, archives, Internet publishing and all other information services",0.07349851025229039,USD,kgco2e_per_usd
+522A00/US,Nondepository credit intermediation and related activities,0.08084475654976327,USD,kgco2e_per_usd
+52A000/US,Monetary authorities and depository credit intermediation,0.07986769079741704,USD,kgco2e_per_usd
+523900/US,"Investment advice, portfolio management, and other financial advising services",0.08073379316372432,USD,kgco2e_per_usd
+523A00/US,Securities and commodities brokerage and exchanges,0.04746224185897412,USD,kgco2e_per_usd
+524113/US,Direct life insurance carriers,0.05184269756265475,USD,kgco2e_per_usd
+5241XX/US,"Insurance carriers, except direct life",0.0354168772778279,USD,kgco2e_per_usd
+524200/US,Insurance agencies and brokerages,0.02919956472238159,USD,kgco2e_per_usd
+525000/US,"Funds, trusts, and financial vehicles",0.2408545133665335,USD,kgco2e_per_usd
+531HSO/US,Owner-occupied housing,0.04055022273322769,USD,kgco2e_per_usd
+531HST/US,Tenant-occupied housing,0.03439717297187334,USD,kgco2e_per_usd
+531ORE/US,Other real estate,0.2762880790613381,USD,kgco2e_per_usd
+532100/US,Vehicle rental and leasing,0.1278558103934149,USD,kgco2e_per_usd
+532400/US,Commercial equipment rental,0.124977742640368,USD,kgco2e_per_usd
+532A00/US,Consumer goods and general rental centers,0.1215575608688751,USD,kgco2e_per_usd
+533000/US,Lessors of nonfinancial intangible assets,0.06129249543675361,USD,kgco2e_per_usd
+541100/US,Legal services,0.05162779126855684,USD,kgco2e_per_usd
+541511/US,Custom computer programming,0.0844899574502866,USD,kgco2e_per_usd
+541512/US,Computer systems design,0.0850057884510131,USD,kgco2e_per_usd
+54151A/US,"Other computer related services, including facilities management",0.0787119075430328,USD,kgco2e_per_usd
+541200/US,"Accounting, tax preparation, bookkeeping, and payroll",0.06123235421155913,USD,kgco2e_per_usd
+541300/US,"Architectural, engineering, and related services",0.1198517676173171,USD,kgco2e_per_usd
+541610/US,Management consulting,0.0771801688687482,USD,kgco2e_per_usd
+5416A0/US,Environmental and other technical consulting services,0.09608284931860891,USD,kgco2e_per_usd
+541700/US,Scientific research and development,0.1821153454521792,USD,kgco2e_per_usd
+541800/US,Advertising and public relations,0.09140470990634553,USD,kgco2e_per_usd
+541400/US,Specialized design,0.1005230440259667,USD,kgco2e_per_usd
+541920/US,Photographers,0.1254251640980652,USD,kgco2e_per_usd
+541940/US,Veterinarians,0.1508802363491293,USD,kgco2e_per_usd
+5419A0/US,"Marketing research and all other miscellaneous professional, scientific, and technical services",0.09232630842627702,USD,kgco2e_per_usd
+550000/US,Company and enterprise management,0.08665262095823732,USD,kgco2e_per_usd
+561300/US,Employment services,0.06038572761782317,USD,kgco2e_per_usd
+561700/US,Buildings and dwellings services,0.2400652029954956,USD,kgco2e_per_usd
+561100/US,Office administration,0.1029665382414501,USD,kgco2e_per_usd
+561200/US,Facilities support,0.2304772412519985,USD,kgco2e_per_usd
+561400/US,Business support,0.1225420282870958,USD,kgco2e_per_usd
+561500/US,Travel arrangement and reservation,0.09309882319336701,USD,kgco2e_per_usd
+561600/US,Investigation and security,0.0922722866388098,USD,kgco2e_per_usd
+561900/US,Other support services,0.1489363785073143,USD,kgco2e_per_usd
+562000/US,Waste management and remediation,1.281715232063902,USD,kgco2e_per_usd
+611100/US,Elementary and secondary schools,0.2212934348912126,USD,kgco2e_per_usd
+611A00/US,"Colleges, universities, junior colleges, and professional schools",0.1595665091893604,USD,kgco2e_per_usd
+611B00/US,Other educational services,0.1165883749613823,USD,kgco2e_per_usd
+621100/US,Physicians,0.09057744201528842,USD,kgco2e_per_usd
+621200/US,Dentists,0.06632670480866296,USD,kgco2e_per_usd
+621300/US,Healthcare practitioners (except physicians and dentists),0.1097213921072178,USD,kgco2e_per_usd
+621400/US,Outpatient healthcare,0.1090097806827848,USD,kgco2e_per_usd
+621500/US,Medical laboratories,0.08634439622473324,USD,kgco2e_per_usd
+621600/US,Home healthcare,0.1202703356301538,USD,kgco2e_per_usd
+621900/US,Ambulances,0.1911094880596186,USD,kgco2e_per_usd
+622000/US,Hospitals,0.1690127097169875,USD,kgco2e_per_usd
+623A00/US,Nursing and community care facilities,0.1873089408072985,USD,kgco2e_per_usd
+623B00/US,"Residential mental retardation, mental health, substance abuse and other facilities",0.1569196541017543,USD,kgco2e_per_usd
+624100/US,Individual and family services,0.1434782673381919,USD,kgco2e_per_usd
+624400/US,Child day care,0.252640646765863,USD,kgco2e_per_usd
+624A00/US,"Community food, housing, and other relief services, including rehabilitation services",0.2598411009426169,USD,kgco2e_per_usd
+711100/US,Performances,0.09516909030610274,USD,kgco2e_per_usd
+711200/US,Sports,0.06962137948429548,USD,kgco2e_per_usd
+711500/US,"Independent artists, writers, and performers",0.03744473909350968,USD,kgco2e_per_usd
+711A00/US,Promoters and agents,0.09767428460316131,USD,kgco2e_per_usd
+712000/US,"Museums, historical sites, zoos, and parks",0.1559760146899661,USD,kgco2e_per_usd
+713100/US,Amusement parks and arcades,0.2101149302354441,USD,kgco2e_per_usd
+713200/US,Gambling establishments (except casino hotels),0.2113864682455066,USD,kgco2e_per_usd
+713900/US,"Golf courses, marinas, ski resorts, fitness and other rec centers and industries",0.29530764703806,USD,kgco2e_per_usd
+721000/US,Hotels and campgrounds,0.1745188728133147,USD,kgco2e_per_usd
+722110/US,Full-service restaurants,0.262040829521229,USD,kgco2e_per_usd
+722211/US,Limited-service restaurants,0.3676016242227335,USD,kgco2e_per_usd
+722A00/US,All other food and drinking places,0.1794004845840518,USD,kgco2e_per_usd
+811100/US,Vehicle repair,0.1433161706851702,USD,kgco2e_per_usd
+811200/US,Electronic  equipment repair and maintenance,0.1018830106499166,USD,kgco2e_per_usd
+811300/US,Commercial machinery repair,0.1844637246454464,USD,kgco2e_per_usd
+811400/US,Household goods repair,0.1505604069318727,USD,kgco2e_per_usd
+812100/US,Salons and barber shops,0.1531925684916392,USD,kgco2e_per_usd
+812200/US,Funerary services,0.05144525925062495,USD,kgco2e_per_usd
+812300/US,Dry-cleaning and laundry,0.1936214538856483,USD,kgco2e_per_usd
+812900/US,"Pet care, photofinishing, parking and other sundry services",0.133899120439522,USD,kgco2e_per_usd
+813100/US,Religious organizations,0.09055109551616869,USD,kgco2e_per_usd
+813A00/US,"Grantmaking, giving, and social advocacy organizations",0.07085355043848489,USD,kgco2e_per_usd
+813B00/US,"Civic, social, professional, and similar organizations",0.1488490610262445,USD,kgco2e_per_usd
+814000/US,Household employees,0.0,USD,kgco2e_per_usd
+S00500/US,Federal general government (defense),0.1276678698023273,USD,kgco2e_per_usd
+S00600/US,Federal general government (nondefense),0.2533493570786092,USD,kgco2e_per_usd
+491000/US,Postal service,0.08584468758463464,USD,kgco2e_per_usd
+S00102/US,Other federal government enterprises,0.3275338233459253,USD,kgco2e_per_usd
+GSLGE/US,State and local government educational services,0.1440128000221162,USD,kgco2e_per_usd
+GSLGH/US,State and local government hospitals and health services,0.2715031521038995,USD,kgco2e_per_usd
+GSLGO/US,State and local government other services,0.2811881234761284,USD,kgco2e_per_usd
+S00203/US,Other state and local government enterprises,0.4043489270916327,USD,kgco2e_per_usd
+S00401/US,Scrap,0.539244907348883,USD,kgco2e_per_usd
+S00402/US,Used and secondhand goods,0.0,USD,kgco2e_per_usd
+S00300/US,Noncomparable imports,0.0,USD,kgco2e_per_usd
+S00900/US,Rest of the world adjustment,0.2533493570786092,USD,kgco2e_per_usd

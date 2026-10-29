@@ -12,7 +12,7 @@ import data from "./data.json"
 export default async function DashboardPage({ params }: { params: Promise<{ locationSlug: string }> }) {
   const { locationSlug } = await params;
   //const { locationSlug } = useParams<{ locationSlug: string }>();
-  const { userId, orgSlug } = await auth();
+  const { userId } = await auth();
 
   if (!userId) return redirect('/sign-in');
 

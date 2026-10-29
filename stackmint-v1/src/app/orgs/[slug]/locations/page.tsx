@@ -201,14 +201,27 @@ export default function SitesPage() {
   }, [supabase, organization?.id, showAlert]);
 
   return (
-    <>
-      {/* Alert Banner */}
+    <main className="container mx-auto space-y-8 px-4 py-8">
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold">Locations</h1>
+          <p className="text-muted-foreground">
+            Manage the sites and offices you report data for.
+          </p>
+        </div>
+        <Button onClick={() => setModalOpen(true)}>
+          <MapPinned className="mr-2 h-4 w-4" />
+          Add new location
+        </Button>
+      </header>
+
       {alert.type && (
         <div
-          className={`px-4 py-3 rounded-lg mb-4 flex items-center gap-3 ${
+          role="alert"
+          className={`flex items-center gap-3 border px-4 py-3 ${
             alert.type === "success"
-              ? "bg-green-100 text-green-800 border border-green-300"
-              : "bg-red-100 text-red-800 border border-red-300"
+              ? "border-green-300 bg-green-50 text-green-800"
+              : "border-destructive/30 bg-destructive/10 text-destructive"
           }`}
         >
           {alert.type === "success" ? (
@@ -219,14 +232,6 @@ export default function SitesPage() {
           <p className="text-sm font-medium">{alert.message}</p>
         </div>
       )}
-
-      <Button
-        className="px-4 py-2 text-sm font-medium text-white rounded-lg"
-        onClick={() => setModalOpen(true)}
-      >
-        <MapPinned className="h-4 w-4 mr-2" />
-        Add new location
-      </Button>
 
       {/* Create Location Dialog */}
       {modalOpen && (
@@ -242,7 +247,7 @@ export default function SitesPage() {
 
             <div className="space-y-4 py-4">
               <div>
-                <label className="text-sm font-medium text-gray-700">
+                <label className="text-xs font-semibold uppercase tracking-wide">
                   Location Name *
                 </label>
                 <input
@@ -251,12 +256,12 @@ export default function SitesPage() {
                   value={locationName}
                   onChange={(e) => setLocationName(e.target.value)}
                   disabled={isCreatingLocation}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:bg-gray-100"
+                  className="mt-1 w-full border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:opacity-50"
                 />
               </div>
 
               <div>
-                <label className="text-sm font-medium text-gray-700">
+                <label className="text-xs font-semibold uppercase tracking-wide">
                   Location Address *
                 </label>
                 <LocationAddressAutocomplete
@@ -280,7 +285,7 @@ export default function SitesPage() {
                     {locationLng.toFixed(4)})
                   </p>
                 ) : (
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="mt-1 text-xs text-muted-foreground">
                     Start typing to search for an address and select one to
                     capture its coordinates
                   </p>
@@ -319,59 +324,70 @@ export default function SitesPage() {
         </Dialog>
       )}
 
-      {/* Locations List */}
-      <div className="mt-8 space-y-6">
-        <div className="space-y-4">
-          <h2 className="text-2xl font-semibold">Your Locations</h2>
-
-          {isLoadingLocations && (
-            <p className="text-sm text-gray-600">Loading locations...</p>
+      <section className="space-y-4">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-xl font-semibold">Your Locations</h2>
+          {!isLoadingLocations && locations.length > 0 && (
+            <span className="text-sm text-muted-foreground">
+              {locations.length}{" "}
+              {locations.length === 1 ? "location" : "locations"}
+            </span>
           )}
+        </div>
 
-          {!isLoadingLocations && locations.length === 0 && (
+        {isLoadingLocations && (
+          <p className="text-sm text-muted-foreground">Loading locations...</p>
+        )}
+
+        {!isLoadingLocations && locations.length === 0 && (
+          <div className="flex flex-col items-center gap-3 border border-dashed bg-muted/40 px-6 py-12 text-center">
+            <MapPinned className="h-8 w-8 text-muted-foreground" />
             <p className="text-sm text-muted-foreground">
               No locations yet. Create your first location to get started.
             </p>
-          )}
+            <Button variant="outline" onClick={() => setModalOpen(true)}>
+              Add new location
+            </Button>
+          </div>
+        )}
 
-          {!isLoadingLocations && locations.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {locations.map((location) => (
-                <button
-                  key={location.id}
-                  onClick={() =>
-                    router.push(
-                      `/orgs/${organization?.slug}/locations/${location.id}/dashboard`,
-                    )
-                  }
-                  className="group relative flex flex-col justify-between border border-gray-200 rounded-xl p-6 bg-white shadow-sm hover:shadow-md transition-all text-left h-auto focus:outline-none focus:ring-2 focus:ring-primary"
-                >
-                  <div className="flex-1">
-                    <div className="flex items-start gap-2 mb-3">
-                      <MapPinned className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        {location.location_name}
-                      </h3>
-                    </div>
-                    <p className="text-sm text-gray-600">
-                      {location.location_address}
-                    </p>
+        {!isLoadingLocations && locations.length > 0 && (
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {locations.map((location) => (
+              <button
+                key={location.id}
+                onClick={() =>
+                  router.push(
+                    `/orgs/${organization?.slug}/locations/${location.id}/dashboard`,
+                  )
+                }
+                className="group flex flex-col justify-between bg-card p-6 text-left text-card-foreground shadow-sm ring-1 ring-foreground/5 transition-all hover:shadow-md hover:ring-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <div className="flex-1">
+                  <div className="mb-3 flex items-start gap-2">
+                    <MapPinned className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                    <h3 className="font-heading text-lg font-semibold tracking-wider uppercase">
+                      {location.location_name}
+                    </h3>
                   </div>
-                  <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
-                    <p className="text-xs text-gray-500">
-                      Created{" "}
-                      {location.created_at
-                        ? new Date(location.created_at).toLocaleDateString()
-                        : "Recently"}
-                    </p>
-                    <ChevronRight className="h-5 w-5 text-gray-400 group-hover:text-primary transition-colors" />
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </>
+                  <p className="text-sm leading-relaxed text-muted-foreground">
+                    {location.location_address}
+                  </p>
+                </div>
+                <div className="mt-4 flex items-center justify-between border-t pt-4">
+                  <p className="text-xs text-muted-foreground">
+                    Created{" "}
+                    {location.created_at
+                      ? new Date(location.created_at).toLocaleDateString()
+                      : "Recently"}
+                  </p>
+                  <ChevronRight className="h-5 w-5 text-muted-foreground transition-colors group-hover:text-primary" />
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+    </main>
   );
 }

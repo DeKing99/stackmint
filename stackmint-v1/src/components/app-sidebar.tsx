@@ -15,9 +15,10 @@ import {
   Blocks,
   Map,
   FileChartPie,
-  Settings,
   Users2,
   Building,
+  Download,
+  MapPinned
 } from "lucide-react";
 
 import { NavMain } from "@/components/nav-main";
@@ -93,7 +94,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             : orgPathSegment
               ? `/orgs/${orgPathSegment}/collect`
               : "#",
-          icon: Library,
+          icon: Download,
         },
       ];
 
@@ -101,7 +102,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       items.splice(1, 0, {
         title: "Locations",
         url: orgPathSegment ? `/orgs/${orgPathSegment}/locations` : "#",
-        icon: Map,
+        icon: MapPinned,
       });
     }
 

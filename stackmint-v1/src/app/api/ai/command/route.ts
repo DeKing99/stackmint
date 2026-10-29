@@ -14,10 +14,8 @@ import {
 
 import { NextResponse } from 'next/server';
 import { type SlateEditor, createSlateEditor, nanoid, RangeApi } from 'platejs';
-import { z } from 'zod';
 
 import { BaseEditorKit } from '@/components/editor/editor-base-kit';
-import { markdownJoinerTransform } from '@/lib/markdown-joiner-transform';
 
 // Helper to call the Python backend
 async function callPythonBackend(endpoint: string, payload: any) {
@@ -124,9 +122,13 @@ export async function POST(req: NextRequest) {
         // COMMENT
         if (toolName === 'comment') {
           const lastUserMessage = messagesRaw[lastIndex] as ChatMessage;
-            const prompt: string | undefined = (lastUserMessage as ChatMessage).parts.find(
-            (p: { type: string; text?: string }) => p.type === 'text'
-            )?.text;
+          const textPart = lastUserMessage.parts.find(
+            (
+              part
+            ): part is Extract<(typeof lastUserMessage.parts)[number], { type: 'text' }> =>
+              part.type === 'text' && 'text' in part
+          );
+          const prompt = textPart?.text;
 
           const commentPrompt = replacePlaceholders(
             editor,
@@ -185,37 +187,6 @@ const commentPromptTemplate = ({ isSelecting }: { isSelecting: boolean }) => {
     ? PROMPT_TEMPLATES.commentPromptSelecting
     : PROMPT_TEMPLATES.commentPromptDefault;
 };
-
-const chooseToolSystem = `You are a strict classifier. Classify the user's last request as "generate", "edit", or "comment".
-
-Priority rules:
-1. Default is "generate". Any open question, idea request, or creation request → "generate".
-2. Only return "edit" if the user provides original text (or a selection of text) AND asks to change, rephrase, translate, or shorten it.
-3. Only return "comment" if the user explicitly asks for comments, feedback, annotations, or review. Do not infer "comment" implicitly.
-
-Return only one enum value with no explanation.`;
-
-const commentSystem = `You are a document review assistant.  
-You will receive an MDX document wrapped in <block id="..."> content </block> tags.  
-<Selection> is the text highlighted by the user.
-
-Your task:  
-- Read the content of all blocks and provide comments.  
-- For each comment, generate a JSON object:  
-  - blockId: the id of the block being commented on.
-  - content: the original document fragment that needs commenting.
-  - comments: a brief comment or explanation for that fragment.
-
-Rules:
-- IMPORTANT: If a comment spans multiple blocks, use the id of the **first** block.
-- The **content** field must be the original content inside the block tag. The returned content must not include the block tags, but should retain other MDX tags.
-- IMPORTANT: The **content** field must be flexible:
-  - It can cover one full block, only part of a block, or multiple blocks.  
-  - If multiple blocks are included, separate them with two \\n\\n.  
-  - Do NOT default to using the entire block—use the smallest relevant span instead.
-- At least one comment must be provided.
-- If a <Selection> exists, Your comments should come from the <Selection>, and if the <Selection> is too long, there should be more than one comment.
-`;
 
 const systemCommon = `\
 You are an advanced AI-powered note-taking assistant, designed to enhance productivity and creativity in note management.
@@ -321,18 +292,8 @@ const replaceMessagePlaceholders = (
 
   const template = promptTemplate({ isSelecting });
 
-  interface MessagePart {
-    type: string;
-    text?: string;
-    [key: string]: any;
-  }
-
-  interface ReplaceMessagePlaceholdersOptions {
-    isSelecting: boolean;
-  }
-
-  const parts: MessagePart[] = message.parts.map((part: MessagePart): MessagePart => {
-    if (part.type !== 'text' || !part.text) return part;
+  const parts: typeof message.parts = message.parts.map((part) => {
+    if (part.type !== 'text' || !("text" in part) || !part.text) return part;
 
     let text: string = replacePlaceholders(editor, template, {
       prompt: part.text,
@@ -340,8 +301,8 @@ const replaceMessagePlaceholders = (
 
     if (isSelecting) text = removeEscapeSelection(editor, text);
 
-    return { ...part, text } as MessagePart;
-  });
+    return { ...part, text };
+  }) as typeof message.parts;
 
   return { ...message, parts };
 };
@@ -374,7 +335,7 @@ const removeEscapeSelection = (editor: SlateEditor, text: string) => {
 
   // If the selection is on a void element, inserting the placeholder will fail, and the string must be replaced manually.
   if (!newText.includes(SELECTION_END)) {
-    const [_, end] = RangeApi.edges(editor.selection!);
+    const [, end] = RangeApi.edges(editor.selection!);
 
     const node = editor.api.block({ at: end.path });
 

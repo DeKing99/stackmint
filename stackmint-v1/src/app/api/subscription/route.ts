@@ -1,7 +1,7 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 
 export async function GET() {
-  const { orgId } = auth();
+  const { orgId } = await auth();
 
   if (!orgId) {
     return Response.json({
@@ -11,19 +11,18 @@ export async function GET() {
   }
 
   try {
+    const client = await clerkClient();
     const subscription =
-      await clerkClient.billing.getOrganizationBillingSubscription(orgId);
+      await client.billing.getOrganizationBillingSubscription(orgId);
 
-    const active =
-      subscription?.status === "active" ||
-      subscription?.status === "trialing";
+    const active = subscription?.status === "active";
 
     return Response.json({
       active,
       subscription
     });
 
-  } catch (error) {
+  } catch {
 
     return Response.json({
       active: false,

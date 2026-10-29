@@ -41,7 +41,7 @@ function stripIds(nodes: any): any {
   if (!nodeArray) return nodes;
 
   return nodeArray.map((node: any) => {
-    const { id, children, ...rest } = node;
+    const { children, ...rest } = node;
     return {
       ...rest,
       ...(children ? { children: stripIds(children) } : {}),
@@ -105,12 +105,12 @@ export function PlateEditor({
 
   // effect fires when debouncedValue updates
   React.useEffect(() => {
-    if (debouncedValue) {
+    if (debouncedValue && docId) {
       console.log("💾 debounced value ready to save:", debouncedValue);
       // <-- call supabase save here
-      saveDoc(docId!, debouncedValue);
+      saveDoc(docId, debouncedValue);
     }
-  }, [debouncedValue]);
+  }, [debouncedValue, docId]);
 
   return (
     <Plate
