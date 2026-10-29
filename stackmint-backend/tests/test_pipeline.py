@@ -475,7 +475,10 @@ class TestEmissionsCalculation:
 
         result = calculate_emissions_for_row(mock_sb, row, "act-can-001")
         assert abs(result["co2e"] - 2.0) < 0.001
-        assert result["factor_activity_type"] == "stationary_combustion_gaseous_fuels"
+        assert (
+            result["metadata"]["factor_activity_type"]
+            == "stationary_combustion_gaseous_fuels"
+        )
         assert result["reporting_year"] == 2024
 
 
@@ -778,6 +781,68 @@ class TestEnterpriseFallbacks:
         assert result["source_system"] == "stackmint_upload"
         assert result["metadata"]["supplier_name"] == "Acme Supplies Ltd"
         assert result["metadata"]["department_name"] == "Operations"
+
+    def test_activity_date_is_not_inferred_from_upload_timestamp(self):
+        from app.parsing.pipeline import _apply_required_field_fallbacks
+
+        result = _apply_required_field_fallbacks(
+            {},
+            {"created_at": "2024-01-01T00:00:00+00:00"},
+            "stationary_combustion",
+        )
+
+        assert "date" not in result
+
+    def test_activity_date_is_not_carried_forward_between_rows(self):
+        from app.parsing.pipeline import _apply_carry_forward_fallbacks
+
+        result = _apply_carry_forward_fallbacks(
+            {},
+            "stationary_combustion",
+            {"date": "2024-01-01"},
+        )
+
+        assert "date" not in result
+
+    def test_year_only_does_not_invent_january_activity_date(self):
+        from app.parsing.pipeline import _derive_date_string_from_row
+
+        assert _derive_date_string_from_row({"year": 2024}) is None
+
+    def test_invalid_month_does_not_invent_activity_date(self):
+        from app.parsing.pipeline import _derive_date_string_from_row
+
+        assert _derive_date_string_from_row({"year": 2024, "month": 13}) is None
+
+    def test_explicit_year_and_month_can_derive_activity_month(self):
+        from app.parsing.pipeline import _derive_date_string_from_row
+
+        assert (
+            _derive_date_string_from_row({"year": 2024, "month": 2})
+            == "2024-02-01"
+        )
+
+    def test_activity_date_provenance_tracks_source_and_derived_dates(self):
+        from app.parsing.pipeline import _apply_required_field_fallbacks
+
+        source_date = _apply_required_field_fallbacks(
+            {"date": "2024-02-10"},
+            {},
+            "stationary_combustion",
+        )
+        derived_date = _apply_required_field_fallbacks(
+            {"year": 2024, "month": 2},
+            {},
+            "stationary_combustion",
+        )
+
+        assert source_date["activity_date_provenance"] == "source_activity_date"
+        assert derived_date["activity_date_provenance"] == "year_month"
+
+    def test_energy_date_mapping_does_not_treat_invoice_date_as_activity_date(self):
+        from app.parsing.mapping import COLUMN_ALIASES
+
+        assert "invoice_date" not in COLUMN_ALIASES["energy_usage"]["date"]
 
     def test_manual_canonical_activity_type_maps_to_schema_activity_type(self):
         from app.parsing.pipeline import _resolve_upload_activity_type

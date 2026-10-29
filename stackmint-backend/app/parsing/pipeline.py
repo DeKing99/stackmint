@@ -519,7 +519,6 @@ def _apply_carry_forward_fallbacks(
     fields = schema.get("fields", {})
 
     carry_eligible = {
-        "date",
         "facility_id",
         "unit",
         "gas_type",
@@ -567,9 +566,11 @@ def _derive_date_string_from_row(row: Dict[str, Any]) -> str | None:
     if year is None or year < 1900 or year > 2100:
         return None
 
-    month = _safe_int(row.get("month")) or 1
+    month = _safe_int(row.get("month"))
+    if month is None:
+        return None
     if month < 1 or month > 12:
-        month = 1
+        return None
 
     return f"{year:04d}-{month:02d}-01"
 
@@ -587,15 +588,14 @@ def _apply_required_field_fallbacks(
         if not _is_empty_cell(fallback_facility):
             mapped_row["facility_id"] = str(fallback_facility)
 
-    if "date" in fields and _is_empty_cell(mapped_row.get("date")):
-        derived = _derive_date_string_from_row(mapped_row)
-        if derived:
-            mapped_row["date"] = derived
+    if "date" in fields:
+        if not _is_empty_cell(mapped_row.get("date")):
+            mapped_row["activity_date_provenance"] = "source_activity_date"
         else:
-            created_at = upload.get("created_at")
-            if isinstance(created_at, str) and len(created_at) >= 10:
-                # Keep only ISO date part (YYYY-MM-DD) from timestamp fallback.
-                mapped_row["date"] = created_at[:10]
+            derived = _derive_date_string_from_row(mapped_row)
+            if derived:
+                mapped_row["date"] = derived
+                mapped_row["activity_date_provenance"] = "year_month"
 
     return mapped_row
 
@@ -612,6 +612,7 @@ def _apply_enterprise_upload_fallbacks(
         reporting_period = enterprise_inputs.get("reporting_period")
         if isinstance(reporting_period, str) and reporting_period.strip():
             mapped_row["reporting_period"] = reporting_period.strip()
+            mapped_row["activity_date_provenance"] = "explicit_reporting_period"
 
     if _is_empty_cell(mapped_row.get("invoice_number")):
         invoice_number = enterprise_inputs.get("invoice_number")
@@ -1002,6 +1003,9 @@ def run_parsing_pipeline(upload: Dict[str, Any]) -> Dict[str, Any]:
                     resolved_activity_type
                 )
                 validated_row = _propagate_enterprise_fields(validated_row, mapped_row)
+                validated_row["activity_date_provenance"] = (
+                    mapped_row.get("activity_date_provenance") or "unknown"
+                )
 
                 # Keep activity type on each row so emissions lookup can match factors.
                 validated_row["activity_type"] = resolved_activity_type

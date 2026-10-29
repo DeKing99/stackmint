@@ -15,7 +15,7 @@ COLUMN_ALIASES: Dict[str, Dict[str, list]] = {
     # ENERGY USAGE
     # -------------------------------------------------
     "energy_usage": {
-        "date": ["date", "usage_date", "invoice_date"],
+        "date": ["date", "usage_date"],
         "facility_id": ["facility", "site", "location", "plant"],
         "meter_id": ["meter", "meter_number", "meter_id"],
         "energy_type": ["energy", "fuel_type", "utility_type"],

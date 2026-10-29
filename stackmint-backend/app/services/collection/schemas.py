@@ -1,6 +1,6 @@
 def calculate_overall_completion(
     activities: list[dict],
-) -> float:
+) -> float | None:
 
     total_expected = sum(
         activity["expected_units"]
@@ -8,7 +8,7 @@ def calculate_overall_completion(
     )
 
     if total_expected == 0:
-        return 100.0
+        return None
 
     total_completed = sum(
         activity["completed_units"]

@@ -14,12 +14,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-// Percentage thresholds that drive the status colour and label.
-const COMPLETE_ABOVE = 70;
-const IN_PROGRESS_ABOVE = 0;
 const PAGE_SIZE = 8;
 
-type ActivityStatus = "complete" | "in_progress" | "missing";
+type ActivityStatus =
+  | "complete"
+  | "in_progress"
+  | "missing"
+  | "not_applicable"
+  | "unavailable";
 
 const STATUS_META: Record<
   ActivityStatus,
@@ -40,18 +42,28 @@ const STATUS_META: Record<
     textClass: "text-red-600",
     barClass: "[&>div]:bg-red-600",
   },
+  not_applicable: {
+    label: "Not applicable",
+    textClass: "text-muted-foreground",
+    barClass: "[&>div]:bg-muted-foreground",
+  },
+  unavailable: {
+    label: "Unavailable",
+    textClass: "text-muted-foreground",
+    barClass: "[&>div]:bg-muted-foreground",
+  },
 };
 
 function getStatus(percentage: number): ActivityStatus {
-  if (percentage > COMPLETE_ABOVE) return "complete";
-  if (percentage > IN_PROGRESS_ABOVE) return "in_progress";
+  if (percentage >= 100) return "complete";
+  if (percentage > 0) return "in_progress";
   return "missing";
 }
 
 type ActivityProgressTableProps = {
   slug: string;
-  /** Completion percentage (0-100) keyed by activity type value. */
-  completion?: Record<string, number>;
+  /** Completion percentage keyed by activity type; null means not applicable. */
+  completion?: Record<string, number | null | undefined>;
   /** Activity type values to show; defaults to every known type. */
   requiredActivityValues?: string[];
   id?: string;
@@ -80,7 +92,7 @@ export default function ActivityProgressTable({
       <CardHeader>
         <CardTitle>Activity data status</CardTitle>
         <CardDescription>
-          Progress across each activity type tracked for this reporting period.
+          Status is shown only when a completion calculation is available.
           Click an activity to open its timeline in a new tab.
         </CardDescription>
       </CardHeader>
@@ -97,11 +109,18 @@ export default function ActivityProgressTable({
             </span>
           </div>
           {visibleRows.map((a) => {
-            const percentage = Math.min(
-              100,
-              Math.max(0, completion[a.value] ?? 0),
-            );
-            const meta = STATUS_META[getStatus(percentage)];
+            const value = completion[a.value];
+            const percentage =
+              typeof value === "number" && Number.isFinite(value)
+                ? Math.min(100, Math.max(0, value))
+                : null;
+            const status: ActivityStatus =
+              value === null
+                ? "not_applicable"
+                : percentage === null
+                  ? "unavailable"
+                  : getStatus(percentage);
+            const meta = STATUS_META[status];
 
             return (
               <Link
@@ -116,13 +135,21 @@ export default function ActivityProgressTable({
                   {a.label}
                 </span>
                 <span role="cell" className="flex items-center gap-3">
-                  <Progress
-                    value={percentage}
-                    className={`h-2 rounded-none ${meta.barClass}`}
-                  />
-                  <span className="w-10 text-right text-sm tabular-nums">
-                    {percentage}%
-                  </span>
+                  {percentage === null ? (
+                    <span className="text-sm text-muted-foreground">
+                      {meta.label}
+                    </span>
+                  ) : (
+                    <>
+                      <Progress
+                        value={percentage}
+                        className={`h-2 rounded-none ${meta.barClass}`}
+                      />
+                      <span className="w-10 text-right text-sm tabular-nums">
+                        {Math.round(percentage)}%
+                      </span>
+                    </>
+                  )}
                 </span>
                 <span
                   role="cell"

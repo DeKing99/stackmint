@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.metrics import router as metrics_router
 from app.api.preflight import router as preflight_router
+from app.api.collection import router as collection_router
 from app.api.routes import router
 from app.workers.polling import start_worker_pool
 from app.core.config import settings
@@ -53,5 +54,5 @@ def read_root():
 app.include_router(router)
 app.include_router(metrics_router)
 app.include_router(preflight_router)
+app.include_router(collection_router)
 # ---------- endpoint: create a location (admin only) ----------
-
