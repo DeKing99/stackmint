@@ -26,8 +26,6 @@ import {
   CheckCircle,
   XCircle,
 } from "lucide-react";
-import { Progress } from '@/components/ui/progress'
-import { Field, FieldLabel } from "@/components/ui/field";
 import {
   Card,
   CardAction,
@@ -48,10 +46,6 @@ function isUuid(value: string): boolean {
     value,
   );
 }
-
-// Placeholder completion percentages keyed by activity type value. Replace
-// with real data once the completion checks are implemented.
-const activityCompletion: Record<string, number> = {};
 
 async function updateUploadState(
   uploadId: string,
@@ -716,8 +710,10 @@ export default function FileUploader() {
         <section className="grid gap-6 lg:grid-cols-3">
           <Card className="lg:col-span-2">
             <CardHeader>
-              <CardTitle>Current Fiscal Year</CardTitle>
-              <CardDescription>FY2026 files needed</CardDescription>
+              <CardTitle>Collection progress</CardTitle>
+              <CardDescription>
+                Live completeness is not available yet.
+              </CardDescription>
               <CardAction>
                 <Button
                   onClick={() =>
@@ -731,21 +727,15 @@ export default function FileUploader() {
               </CardAction>
             </CardHeader>
             <CardContent>
-              <Field>
-                <FieldLabel htmlFor="progress-sharp">
-                  <span>FY2026</span>
-                  <span className="ml-auto">80%</span>
-                </FieldLabel>
-                <Progress
-                  value={80}
-                  id="progress-sharp"
-                  className="h-2 rounded-none"
-                />
-              </Field>
+              <p className="text-sm text-muted-foreground">
+                Progress will appear when expected activities, reporting
+                periods, and applicable locations are connected to the
+                calculation.
+              </p>
             </CardContent>
             <CardFooter>
               <p className="text-muted-foreground">
-                12 of 14 areas completed
+                No verified completion total
               </p>
             </CardFooter>
           </Card>
@@ -795,7 +785,6 @@ export default function FileUploader() {
           <ActivityProgressTable
             id="activity-progress-table"
             slug={slug}
-            completion={activityCompletion}
             requiredActivityValues={requiredActivityValues ?? []}
           />
         </section>

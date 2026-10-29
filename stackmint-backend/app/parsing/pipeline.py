@@ -519,7 +519,6 @@ def _apply_carry_forward_fallbacks(
     fields = schema.get("fields", {})
 
     carry_eligible = {
-        "date",
         "facility_id",
         "unit",
         "gas_type",
@@ -567,9 +566,11 @@ def _derive_date_string_from_row(row: Dict[str, Any]) -> str | None:
     if year is None or year < 1900 or year > 2100:
         return None
 
-    month = _safe_int(row.get("month")) or 1
+    month = _safe_int(row.get("month"))
+    if month is None:
+        return None
     if month < 1 or month > 12:
-        month = 1
+        return None
 
     return f"{year:04d}-{month:02d}-01"
 
@@ -591,11 +592,6 @@ def _apply_required_field_fallbacks(
         derived = _derive_date_string_from_row(mapped_row)
         if derived:
             mapped_row["date"] = derived
-        else:
-            created_at = upload.get("created_at")
-            if isinstance(created_at, str) and len(created_at) >= 10:
-                # Keep only ISO date part (YYYY-MM-DD) from timestamp fallback.
-                mapped_row["date"] = created_at[:10]
 
     return mapped_row
 
