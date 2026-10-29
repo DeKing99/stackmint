@@ -63,7 +63,7 @@ function getStatus(percentage: number): ActivityStatus {
 type ActivityProgressTableProps = {
   slug: string;
   /** Completion percentage keyed by activity type; null means not applicable. */
-  completion?: Record<string, number | null>;
+  completion?: Record<string, number | null | undefined>;
   /** Activity type values to show; defaults to every known type. */
   requiredActivityValues?: string[];
   id?: string;

@@ -18,6 +18,27 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
+## Collection completeness
+
+Before using live collection progress, apply
+`stackmint-backend/scripts/sql/collection_completeness_migration.sql` to the
+Supabase project. It adds explicit activity-date provenance, maps factor
+variants to canonical collection categories, and creates the
+`location_activity_applicability` table. Historical activity rows are marked
+`unknown` and are intentionally excluded from completeness until their date
+provenance is verified; do not backfill them from upload timestamps.
+
+The Next.js server and backend must both have the same server-side Supabase
+secret configured as `SUPABASE_SECRET_KEY` or `SUPABASE_SERVICE_ROLE_KEY`.
+Never expose this key with a `NEXT_PUBLIC_` variable. The app proxies
+authenticated collection requests to the backend and signs those internal
+requests with this key.
+
+Progress uses the current UTC calendar year. Monthly, quarterly, and annual
+rules generate 12, 4, and 1 expected periods per applicable location,
+respectively. Each required activity must have an explicit applicability
+choice for every organization location before its completeness is calculated.
+
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
 ## Location search & autocomplete (Mapbox)

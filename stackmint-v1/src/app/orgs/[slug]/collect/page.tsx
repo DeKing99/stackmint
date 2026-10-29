@@ -26,6 +26,7 @@ import {
   CheckCircle,
   XCircle,
 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import {
   Card,
   CardAction,
@@ -40,6 +41,22 @@ import ActivityConfigurationModal, {
   type ActivitySettingsMap,
 } from "@/components/activity-configuration-modal";
 import ActivityProgressTable from "@/components/activity-progress-table";
+
+type CompletionActivity = {
+  activity_type: string;
+  status: string;
+  completion: number | null;
+};
+
+type CollectionCompletion = {
+  year: number;
+  status: string;
+  completion: number | null;
+  expected_units: number;
+  completed_units: number;
+  unverified_date_records_excluded: number;
+  activities: CompletionActivity[];
+};
 
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -94,6 +111,10 @@ export default function FileUploader() {
   const [requiredActivityValues, setRequiredActivityValues] = useState<
     string[] | null
   >(null);
+  const [collectionCompletion, setCollectionCompletion] =
+    useState<CollectionCompletion | null>(null);
+  const [isLoadingCompletion, setIsLoadingCompletion] = useState(false);
+  const [completionError, setCompletionError] = useState<string | null>(null);
 
   const supabase = useMemo(
     () =>
@@ -120,6 +141,58 @@ export default function FileUploader() {
       cancelled = true;
     };
   }, [supabase, organization?.id]);
+
+  useEffect(() => {
+    if (!organization?.id) {
+      setCollectionCompletion(null);
+      setCompletionError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingCompletion(true);
+    setCompletionError(null);
+    fetch("/api/collection/completeness", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) {
+          const message = await response.text();
+          throw new Error(message || "Could not load collection progress.");
+        }
+        return (await response.json()) as CollectionCompletion;
+      })
+      .then((result) => {
+        if (!cancelled) setCollectionCompletion(result);
+      })
+      .catch((error: unknown) => {
+        console.error("Could not load collection progress:", error);
+        if (!cancelled) {
+          setCollectionCompletion(null);
+          setCompletionError(
+            error instanceof Error
+              ? error.message
+              : "Could not load collection progress.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingCompletion(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [organization?.id, refreshTrigger]);
+
+  const completionByActivity = Object.fromEntries(
+    (collectionCompletion?.activities ?? []).map((activity) => [
+      activity.activity_type,
+      activity.status === "not_applicable"
+        ? null
+        : activity.status === "unavailable"
+          ? undefined
+          : activity.completion,
+    ]),
+  ) as Record<string, number | null | undefined>;
 
   // function CalculateActivityFileCompletion() {
   //   //This is severly incomplete i need to ask gpt how we decide how much
@@ -670,9 +743,10 @@ export default function FileUploader() {
         <ActivityConfigurationModal
           open={activityConfiguration}
           setOpen={setActivityConfiguration}
-          onSaved={(settings) =>
+          onSaved={(settings) => {
             setRequiredActivityValues(toRequiredValues(settings))
-          }
+            setRefreshTrigger((previous) => previous + 1);
+          }}
         />
       )}
 
@@ -712,7 +786,9 @@ export default function FileUploader() {
             <CardHeader>
               <CardTitle>Collection progress</CardTitle>
               <CardDescription>
-                Live completeness is not available yet.
+                {collectionCompletion
+                  ? `Calendar-year reporting window: ${collectionCompletion.year}.`
+                  : "Calendar-year collection completeness."}
               </CardDescription>
               <CardAction>
                 <Button
@@ -727,16 +803,55 @@ export default function FileUploader() {
               </CardAction>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground">
-                Progress will appear when expected activities, reporting
-                periods, and applicable locations are connected to the
-                calculation.
-              </p>
+              {isLoadingCompletion ? (
+                <p className="text-sm text-muted-foreground">
+                  Calculating collection completeness...
+                </p>
+              ) : completionError ? (
+                <p role="alert" className="text-sm text-destructive">
+                  Could not load live completeness. {completionError}
+                </p>
+              ) : collectionCompletion?.status === "unavailable" ? (
+                <p className="text-sm text-muted-foreground">
+                  Choose applicable or not applicable for every required
+                  activity at each location to calculate progress.
+                </p>
+              ) : collectionCompletion?.status === "not_applicable" ? (
+                <p className="text-sm text-muted-foreground">
+                  No required collection units apply for this reporting year.
+                </p>
+              ) : collectionCompletion?.completion !== null &&
+                collectionCompletion ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span>Completed expected units</span>
+                    <span className="font-medium tabular-nums">
+                      {collectionCompletion.completion.toFixed(1)}%
+                    </span>
+                  </div>
+                  <Progress value={collectionCompletion.completion} />
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Completeness is unavailable.
+                </p>
+              )}
             </CardContent>
             <CardFooter>
-              <p className="text-muted-foreground">
-                No verified completion total
-              </p>
+              <div className="space-y-1">
+                <p className="text-muted-foreground">
+                  {collectionCompletion &&
+                  collectionCompletion.status !== "unavailable"
+                    ? `${collectionCompletion.completed_units} of ${collectionCompletion.expected_units} expected units completed`
+                    : "No verified completion total"}
+                </p>
+                {Boolean(collectionCompletion?.unverified_date_records_excluded) && (
+                  <p className="text-xs text-amber-700">
+                    {collectionCompletion?.unverified_date_records_excluded}{" "}
+                    records with unverified date provenance were excluded.
+                  </p>
+                )}
+              </div>
             </CardFooter>
           </Card>
 
@@ -785,6 +900,7 @@ export default function FileUploader() {
           <ActivityProgressTable
             id="activity-progress-table"
             slug={slug}
+            completion={completionByActivity}
             requiredActivityValues={requiredActivityValues ?? []}
           />
         </section>

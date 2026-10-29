@@ -39,11 +39,22 @@ export type ActivitySettingsMap = Record<string, ActivitySettings>;
 
 type ActivityRule = {
   activity_type: string;
+  collection_category: string | null;
   display_name: string;
   description: string | null;
   default_required: boolean;
   default_frequency: ActivityFrequency;
 };
+
+type Location = {
+  id: string;
+  location_name: string;
+};
+
+type ApplicabilityMap = Record<
+  string,
+  Record<string, boolean | undefined>
+>;
 
 type OverrideRow = {
   activity_type: string;
@@ -87,32 +98,54 @@ export async function loadActivityConfig(
   organizationId: string;
   rules: ActivityRule[];
   settings: ActivitySettingsMap;
+  locations: Location[];
+  applicability: ApplicabilityMap;
 }> {
   const organizationId = await resolveOrganizationId(supabase, clerkOrgId);
 
-  const [rulesRes, overridesRes] = await Promise.all([
+  const [rulesRes, overridesRes, applicabilityResponse] = await Promise.all([
     supabase
       .from("collection_activity_rules")
       .select(
-        "activity_type, display_name, description, default_frequency, default_required",
+        "activity_type, collection_category, display_name, description, default_frequency, default_required",
       )
       .order("display_name"),
     supabase
       .from("organisation_activity_settings")
       .select("activity_type, is_required, frequency")
       .eq("organization_id", organizationId),
+    fetch("/api/collection/applicability", { cache: "no-store" }),
   ]);
 
   if (rulesRes.error) throw rulesRes.error;
   if (overridesRes.error) throw overridesRes.error;
+  if (!applicabilityResponse.ok) {
+    throw new Error("Could not load location applicability.");
+  }
 
-  const rules = (rulesRes.data ?? []) as ActivityRule[];
+  const rules = ((rulesRes.data ?? []) as ActivityRule[]).filter(
+    (rule) => rule.collection_category === rule.activity_type,
+  );
   const overrides = new Map(
     ((overridesRes.data ?? []) as OverrideRow[]).map((o) => [
       o.activity_type,
       o,
     ]),
   );
+  const applicabilityData = (await applicabilityResponse.json()) as {
+    locations: Location[];
+    applicability: Array<{
+      activity_type: string;
+      company_location_id: string;
+      is_applicable: boolean;
+    }>;
+  };
+  const applicability: ApplicabilityMap = {};
+  for (const row of applicabilityData.applicability) {
+    applicability[row.activity_type] ??= {};
+    applicability[row.activity_type][row.company_location_id] =
+      row.is_applicable;
+  }
 
   const settings: ActivitySettingsMap = {};
   for (const rule of rules) {
@@ -123,7 +156,32 @@ export async function loadActivityConfig(
     };
   }
 
-  return { organizationId, rules, settings };
+  return {
+    organizationId,
+    rules,
+    settings,
+    locations: applicabilityData.locations,
+    applicability,
+  };
+}
+
+async function saveLocationApplicability(
+  changes: Array<{
+    activity_type: string;
+    company_location_id: string;
+    is_applicable: boolean | null;
+  }>,
+): Promise<void> {
+  if (changes.length === 0) return;
+  const response = await fetch("/api/collection/applicability", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ settings: changes }),
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(body || "Could not save location applicability.");
+  }
 }
 
 // Stores only the fields that differ from the default (others NULL); a row matching defaults is removed.
@@ -199,6 +257,11 @@ export default function ActivityConfigurationModal({
   const { session } = useSession();
   const { organization } = useOrganization();
   const [rules, setRules] = useState<ActivityRule[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [savedApplicability, setSavedApplicability] =
+    useState<ApplicabilityMap>({});
+  const [draftApplicability, setDraftApplicability] =
+    useState<ApplicabilityMap>({});
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [selected, setSelected] = useState("");
   const [saved, setSaved] = useState<ActivitySettingsMap>({});
@@ -223,6 +286,9 @@ export default function ActivityConfigurationModal({
         if (cancelled) return;
         setOrganizationId(config.organizationId);
         setRules(config.rules);
+        setLocations(config.locations);
+        setSavedApplicability(config.applicability);
+        setDraftApplicability(config.applicability);
         setSaved(config.settings);
         setDraft(config.settings);
         setSelected((prev) => prev || config.rules[0]?.activity_type || "");
@@ -243,15 +309,36 @@ export default function ActivityConfigurationModal({
   const isDirty = (value: string) =>
     JSON.stringify(getSettings(draft, value)) !==
     JSON.stringify(getSettings(saved, value));
-  const dirtyCount = rules.filter((r) => isDirty(r.activity_type)).length;
+  const isApplicabilityDirty = (activityType: string) =>
+    locations.some(
+      (location) =>
+        savedApplicability[activityType]?.[location.id] !==
+        draftApplicability[activityType]?.[location.id],
+    );
+  const dirtyCount = rules.filter(
+    (r) => isDirty(r.activity_type) || isApplicabilityDirty(r.activity_type),
+  ).length;
 
   const current = rules.find((r) => r.activity_type === selected);
   const currentSettings = getSettings(draft, selected);
+  const currentApplicability = draftApplicability[selected] ?? {};
 
   const update = (patch: Partial<ActivitySettings>) =>
     setDraft((prev) => ({
       ...prev,
       [selected]: { ...getSettings(prev, selected), ...patch },
+    }));
+
+  const updateApplicability = (
+    locationId: string,
+    value: boolean | undefined,
+  ) =>
+    setDraftApplicability((previous) => ({
+      ...previous,
+      [selected]: {
+        ...previous[selected],
+        [locationId]: value,
+      },
     }));
 
   const handleSave = async () => {
@@ -264,8 +351,24 @@ export default function ActivityConfigurationModal({
           changes[r.activity_type] = getSettings(draft, r.activity_type);
         }
       }
+      const applicabilityChanges = rules.flatMap((rule) =>
+        locations
+          .filter(
+            (location) =>
+              savedApplicability[rule.activity_type]?.[location.id] !==
+              draftApplicability[rule.activity_type]?.[location.id],
+          )
+          .map((location) => ({
+            activity_type: rule.activity_type,
+            company_location_id: location.id,
+            is_applicable:
+              draftApplicability[rule.activity_type]?.[location.id] ?? null,
+          })),
+      );
       await saveActivityOverrides(supabase, organizationId, rules, changes);
+      await saveLocationApplicability(applicabilityChanges);
       setSaved(draft);
+      setSavedApplicability(draftApplicability);
       onSaved?.(draft);
       toast.success("Activity settings saved.");
       setOpen(false);
@@ -317,7 +420,10 @@ export default function ActivityConfigurationModal({
                             : "text-muted-foreground"
                         }`}
                       >
-                        {isDirty(a.activity_type) ? "● " : ""}
+                        {isDirty(a.activity_type) ||
+                        isApplicabilityDirty(a.activity_type)
+                          ? "● "
+                          : ""}
                         {s.required ? "Required" : "Optional"}
                       </span>
                     </button>
@@ -392,6 +498,62 @@ export default function ActivityConfigurationModal({
                     <p className="text-xs text-muted-foreground">
                       Frequency is not used while this activity is not required.
                     </p>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-xs font-semibold tracking-wide uppercase">
+                      Location applicability
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Choose whether this activity is expected at each location.
+                      Unset locations prevent a completeness calculation.
+                    </p>
+                  </div>
+                  {locations.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Add a location before configuring applicability.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {locations.map((location) => {
+                        const value = currentApplicability[location.id];
+                        return (
+                          <label
+                            key={location.id}
+                            className="flex items-center justify-between gap-4 border p-3 text-sm"
+                          >
+                            <span>{location.location_name}</span>
+                            <select
+                              aria-label={`${current.display_name} applicability at ${location.location_name}`}
+                              value={
+                                value === undefined
+                                  ? ""
+                                  : value
+                                    ? "applicable"
+                                    : "not-applicable"
+                              }
+                              onChange={(event) =>
+                                updateApplicability(
+                                  location.id,
+                                  event.target.value === ""
+                                    ? undefined
+                                    : event.target.value === "applicable",
+                                )
+                              }
+                              className="rounded-md border bg-background px-2 py-1"
+                            >
+                              <option value="">Choose...</option>
+                              <option value="applicable">Applies</option>
+                              <option value="not-applicable">
+                                Not applicable
+                              </option>
+                            </select>
+                          </label>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
               </div>

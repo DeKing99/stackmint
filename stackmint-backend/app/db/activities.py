@@ -102,6 +102,7 @@ def _to_activity_insert_row(row: Dict) -> Dict:
         "organization_id": _resolve_organization_id(row.get("organization_id")),
         "source_upload_id": row.get("upload_id"),
         "activity_date": activity_date,
+        "activity_date_provenance": row.get("activity_date_provenance") or "unknown",
         "activity_type": activity_type,
         "scope": scope,
         "category": category,

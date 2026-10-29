@@ -822,6 +822,23 @@ class TestEnterpriseFallbacks:
             == "2024-02-01"
         )
 
+    def test_activity_date_provenance_tracks_source_and_derived_dates(self):
+        from app.parsing.pipeline import _apply_required_field_fallbacks
+
+        source_date = _apply_required_field_fallbacks(
+            {"date": "2024-02-10"},
+            {},
+            "stationary_combustion",
+        )
+        derived_date = _apply_required_field_fallbacks(
+            {"year": 2024, "month": 2},
+            {},
+            "stationary_combustion",
+        )
+
+        assert source_date["activity_date_provenance"] == "source_activity_date"
+        assert derived_date["activity_date_provenance"] == "year_month"
+
     def test_energy_date_mapping_does_not_treat_invoice_date_as_activity_date(self):
         from app.parsing.mapping import COLUMN_ALIASES
 
